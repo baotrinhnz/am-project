@@ -1,0 +1,16 @@
+[Unit]
+Description=Enviro+ Air Quality Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/enviro-monitor
+ExecStart=/usr/bin/python3 /home/pi/enviro-monitor/sensor_reader.py --interval 60 --lcd
+Restart=on-failure
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

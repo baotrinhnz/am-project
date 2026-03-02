@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/am/dashboard/**)",
+      "Read(//c/am/supabase/**)",
+      "Read(//c/am/raspberry-pi/**)",
+      "Read(//c/am/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

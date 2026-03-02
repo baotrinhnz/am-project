@@ -1,0 +1,9 @@
+enviroplus
+supabase
+python-dotenv
+smbus2
+pms5003
+fonts
+font-roboto
+Pillow
+ST7735

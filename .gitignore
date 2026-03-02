@@ -1,0 +1,37 @@
+# Environment files
+.env
+.env.local
+raspberry-pi/.env
+
+# Node modules
+node_modules/
+dashboard/node_modules/
+
+# Next.js
+dashboard/.next/
+dashboard/out/
+dashboard/build/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.log
+*.tmp
+setup_database.py
+run_sql.py
