@@ -187,17 +187,43 @@ export default function Dashboard() {
   const [range, setRange] = useState(TIME_RANGES[2]); // default 24H
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [selectedDevice, setSelectedDevice] = useState('all');
+  const [devices, setDevices] = useState([]);
+
+  // Fetch available devices
+  const fetchDevices = useCallback(async () => {
+    const { data: rows } = await supabase
+      .from('sensor_readings')
+      .select('device_id')
+      .order('recorded_at', { ascending: false })
+      .limit(1000);
+
+    if (rows) {
+      const uniqueDevices = [...new Set(rows.map(r => r.device_id))].filter(Boolean);
+      setDevices(uniqueDevices);
+      if (uniqueDevices.length > 0 && selectedDevice === 'all') {
+        // Keep 'all' selected by default
+      }
+    }
+  }, [selectedDevice]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     const since = getTimeAgo(range.unit, range.value).toISOString();
 
-    const { data: rows, error } = await supabase
+    let query = supabase
       .from('sensor_readings')
       .select('*')
       .gte('recorded_at', since)
       .order('recorded_at', { ascending: true })
       .limit(2000);
+
+    // Filter by device if not 'all'
+    if (selectedDevice !== 'all') {
+      query = query.eq('device_id', selectedDevice);
+    }
+
+    const { data: rows, error } = await query;
 
     if (error) {
       console.error('Supabase fetch error:', error);
@@ -223,7 +249,12 @@ export default function Dashboard() {
       setLastUpdate(new Date());
     }
     setLoading(false);
-  }, [range]);
+  }, [range, selectedDevice]);
+
+  // Fetch devices on mount
+  useEffect(() => {
+    fetchDevices();
+  }, [fetchDevices]);
 
   // Fetch on mount and range change
   useEffect(() => {
@@ -244,15 +275,20 @@ export default function Dashboard() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'sensor_readings' },
         (payload) => {
-          setLatest(payload.new);
-          setLastUpdate(new Date());
-          // Add to chart data
-          setData(prev => {
-            const newPoint = { ...payload.new, time: formatTime(payload.new.recorded_at, range) };
-            const updated = [...prev, newPoint];
-            // Keep max 200 points
-            return updated.length > 200 ? updated.slice(-200) : updated;
-          });
+          // Only update if matches selected device or viewing all
+          if (selectedDevice === 'all' || payload.new.device_id === selectedDevice) {
+            setLatest(payload.new);
+            setLastUpdate(new Date());
+            // Add to chart data
+            setData(prev => {
+              const newPoint = { ...payload.new, time: formatTime(payload.new.recorded_at, range) };
+              const updated = [...prev, newPoint];
+              // Keep max 200 points
+              return updated.length > 200 ? updated.slice(-200) : updated;
+            });
+          }
+          // Always refresh device list when new device appears
+          fetchDevices();
         }
       )
       .subscribe();
@@ -260,7 +296,7 @@ export default function Dashboard() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [range]);
+  }, [range, selectedDevice, fetchDevices]);
 
   const aqi = getAQILevel(latest?.pm25);
 
@@ -284,21 +320,50 @@ export default function Dashboard() {
           </p>
         </div>
 
-        {/* Time Range Selector */}
-        <div className="flex gap-1 p-1 bg-surface-2 rounded-lg border border-white/5">
-          {TIME_RANGES.map(r => (
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Device Selector */}
+          <div className="flex gap-1 p-1 bg-surface-2 rounded-lg border border-white/5">
             <button
-              key={r.label}
-              onClick={() => setRange(r)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                range.label === r.label
-                  ? 'bg-teal-500/20 text-teal-400 shadow-sm'
+              onClick={() => setSelectedDevice('all')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap ${
+                selectedDevice === 'all'
+                  ? 'bg-purple-500/20 text-purple-400 shadow-sm'
                   : 'text-white/40 hover:text-white/60'
               }`}
             >
-              {r.label}
+              All Devices
             </button>
-          ))}
+            {devices.map(deviceId => (
+              <button
+                key={deviceId}
+                onClick={() => setSelectedDevice(deviceId)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap ${
+                  selectedDevice === deviceId
+                    ? 'bg-purple-500/20 text-purple-400 shadow-sm'
+                    : 'text-white/40 hover:text-white/60'
+                }`}
+              >
+                {deviceId}
+              </button>
+            ))}
+          </div>
+
+          {/* Time Range Selector */}
+          <div className="flex gap-1 p-1 bg-surface-2 rounded-lg border border-white/5">
+            {TIME_RANGES.map(r => (
+              <button
+                key={r.label}
+                onClick={() => setRange(r)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  range.label === r.label
+                    ? 'bg-teal-500/20 text-teal-400 shadow-sm'
+                    : 'text-white/40 hover:text-white/60'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
