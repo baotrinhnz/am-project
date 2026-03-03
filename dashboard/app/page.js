@@ -46,10 +46,10 @@ const SENSOR_GROUPS = [
       { key: 'gas_reducing', label: 'Reducing', unit: 'kΩ', color: '#4ade80', decimals: 1 },
       { key: 'gas_nh3', label: 'NH₃', unit: 'kΩ', color: '#fbbf24', decimals: 1 },
     ]
-  }
+  },
   // Particulate Matter sensor (PMS5003) - disabled as sensor not connected
   // Uncomment when PMS5003 is connected
-  // ,{
+  // {
   //   title: 'Particulate Matter',
   //   icon: '🌫️',
   //   sensors: [
@@ -178,6 +178,113 @@ function ChartPanel({ title, icon, sensors, data, range }) {
       ) : (
         <div className="h-[220px] flex items-center justify-center text-white/20 text-sm">
           No data available for this period
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── System Info Panel ──────────────────────────────────────────────────────
+function SystemInfoPanel({ data, range, devices }) {
+  // Calculate metrics from data
+  const totalReadings = data.length;
+  const activeDeviceCount = devices.length;
+
+  // Calculate readings per hour
+  const timeRangeHours = range.unit === 'hours' ? range.value : range.value * 24;
+  const readingsPerHour = timeRangeHours > 0 ? (totalReadings / timeRangeHours).toFixed(1) : '0';
+
+  // Group data by hour for chart
+  const hourlyData = [];
+  if (data.length > 0) {
+    const grouped = {};
+    data.forEach(d => {
+      const hour = d.time;
+      if (!grouped[hour]) {
+        grouped[hour] = { time: hour, count: 0 };
+      }
+      grouped[hour].count++;
+    });
+    Object.values(grouped).forEach(g => hourlyData.push(g));
+  }
+
+  return (
+    <div className="card-glow p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <span>📊</span>
+        <h3 className="text-sm font-semibold text-white/80">System Info</h3>
+      </div>
+
+      {/* Metrics Grid */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="bg-surface-1/50 rounded-lg p-3">
+          <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Data Points</div>
+          <div className="text-2xl font-mono font-semibold text-cyan-400">{totalReadings}</div>
+        </div>
+        <div className="bg-surface-1/50 rounded-lg p-3">
+          <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Update Rate</div>
+          <div className="text-2xl font-mono font-semibold text-emerald-400">{readingsPerHour}<span className="text-sm text-white/30">/h</span></div>
+        </div>
+        <div className="bg-surface-1/50 rounded-lg p-3">
+          <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Active Devices</div>
+          <div className="text-2xl font-mono font-semibold text-purple-400">{activeDeviceCount}</div>
+        </div>
+        <div className="bg-surface-1/50 rounded-lg p-3">
+          <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Time Range</div>
+          <div className="text-2xl font-mono font-semibold text-amber-400">{range.label}</div>
+        </div>
+      </div>
+
+      {/* Mini chart showing readings over time */}
+      {hourlyData.length > 0 ? (
+        <ResponsiveContainer width="100%" height={100}>
+          <AreaChart data={hourlyData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+            <defs>
+              <linearGradient id="grad-readings" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.3} />
+                <stop offset="100%" stopColor="#22d3ee" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+            <XAxis
+              dataKey="time"
+              tick={{ fill: 'rgba(255,255,255,0.2)', fontSize: 9 }}
+              axisLine={{ stroke: 'rgba(255,255,255,0.05)' }}
+              tickLine={false}
+            />
+            <YAxis
+              tick={{ fill: 'rgba(255,255,255,0.2)', fontSize: 9 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <Tooltip
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                return (
+                  <div className="bg-surface-2 border border-white/10 rounded-lg px-3 py-2 shadow-xl text-xs">
+                    <p className="text-white/50 mb-1">{payload[0].payload.time}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                      <span className="text-white/70">Readings:</span>
+                      <span className="text-white font-mono font-medium">{payload[0].value}</span>
+                    </div>
+                  </div>
+                );
+              }}
+            />
+            <Area
+              type="monotone"
+              dataKey="count"
+              stroke="#22d3ee"
+              strokeWidth={2}
+              fill="url(#grad-readings)"
+              dot={false}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      ) : (
+        <div className="h-[100px] flex items-center justify-center text-white/20 text-xs">
+          No activity data
         </div>
       )}
     </div>
@@ -452,6 +559,12 @@ export default function Dashboard() {
             range={range}
           />
         ))}
+        {/* System Info Panel */}
+        <SystemInfoPanel
+          data={data}
+          range={range}
+          devices={devices}
+        />
       </div>
 
       {/* Footer */}
