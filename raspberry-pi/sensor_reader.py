@@ -53,7 +53,8 @@ except ImportError:
 
 try:
     from pms5003 import PMS5003
-    HAS_PM_SENSOR = True
+    # Disable PMS5003 if not physically connected (sold separately)
+    HAS_PM_SENSOR = False  # Set to True if you have PMS5003 connected
 except ImportError:
     HAS_PM_SENSOR = False
     log.info("PMS5003 library not found. PM readings will be null.")
