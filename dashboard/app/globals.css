@@ -5,20 +5,44 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
+  /* Dark theme (default) */
   --surface-0: #0a0e14;
   --surface-1: #0f1319;
   --surface-2: #161b24;
   --surface-3: #1c2230;
+  --text-primary: #e2e8f0;
+  --text-secondary: rgba(255,255,255,0.7);
+  --text-tertiary: rgba(255,255,255,0.4);
+  --border-color: rgba(255,255,255,0.06);
+  --grid-color: rgba(45, 212, 191, 0.03);
   --accent-teal: #2dd4bf;
   --accent-amber: #fbbf24;
   --accent-rose: #fb7185;
   --accent-blue: #60a5fa;
 }
 
+[data-theme="light"] {
+  /* Light theme */
+  --surface-0: #f8fafc;
+  --surface-1: #ffffff;
+  --surface-2: #f1f5f9;
+  --surface-3: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: rgba(15,23,42,0.7);
+  --text-tertiary: rgba(15,23,42,0.5);
+  --border-color: rgba(15,23,42,0.1);
+  --grid-color: rgba(45, 212, 191, 0.08);
+  --accent-teal: #14b8a6;
+  --accent-amber: #f59e0b;
+  --accent-rose: #f43f5e;
+  --accent-blue: #3b82f6;
+}
+
 body {
   background: var(--surface-0);
-  color: #e2e8f0;
+  color: var(--text-primary);
   font-family: 'DM Sans', system-ui, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Subtle grid background */
@@ -27,20 +51,22 @@ body::before {
   position: fixed;
   inset: 0;
   background-image:
-    linear-gradient(rgba(45, 212, 191, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(45, 212, 191, 0.03) 1px, transparent 1px);
+    linear-gradient(var(--grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
   background-size: 48px 48px;
   pointer-events: none;
   z-index: 0;
+  transition: background-image 0.3s ease;
 }
 
 /* Glow effect for cards */
 .card-glow {
   position: relative;
   background: var(--surface-1);
-  border: 1px solid rgba(255,255,255,0.06);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   overflow: hidden;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .card-glow::before {
@@ -50,7 +76,13 @@ body::before {
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(45, 212, 191, 0.3), transparent);
+  background: linear-gradient(90deg, transparent, var(--accent-teal), transparent);
+  opacity: 0.3;
+  transition: opacity 0.3s ease;
+}
+
+[data-theme="light"] .card-glow {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
 }
 
 /* Scrollbar */

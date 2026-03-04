@@ -32,6 +32,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")  # Use service_role key for insert
 DEVICE_ID = os.getenv("DEVICE_ID", "rpi-enviro-01")
 TABLE_NAME = "sensor_readings"
+TEMP_COMPENSATION_FACTOR = float(os.getenv("TEMP_COMPENSATION_FACTOR", "2.25"))
 
 # --- Logging -----------------------------------------------------------------
 logging.basicConfig(
@@ -85,6 +86,69 @@ def get_supabase_client() -> "Client | None":
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
+# --- Temperature Compensation ------------------------------------------------
+def get_cpu_temperature():
+    """Read Raspberry Pi CPU temperature from system file."""
+    try:
+        with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
+            temp = f.read()
+            return float(temp) / 1000.0  # Convert from millidegrees to degrees
+    except Exception as e:
+        log.warning(f"Could not read CPU temperature: {e}")
+        return None
+
+
+def compensate_temperature(raw_temp, cpu_temp, factor=2.25):
+    """
+    Compensate temperature reading using CPU temperature.
+
+    Formula from Pimoroni: compensated = raw - ((cpu - raw) / factor)
+
+    Args:
+        raw_temp: Temperature from BME280 sensor (affected by CPU heat)
+        cpu_temp: CPU temperature from system
+        factor: Compensation factor (default 2.25, calibrate with thermometer)
+
+    Returns:
+        Compensated temperature in Celsius
+    """
+    if cpu_temp is None:
+        return raw_temp
+    return raw_temp - ((cpu_temp - raw_temp) / factor)
+
+
+# --- LED Control -------------------------------------------------------------
+def init_led():
+    """Initialize and turn on the RGB LED on Enviro+."""
+    try:
+        import pigpio
+        # Enviro+ RGB LED uses GPIO pins: R=6, G=16, B=24
+
+        pi = pigpio.pi()
+        if not pi.connected:
+            raise Exception("pigpio daemon not running")
+
+        LED_R = 6
+        LED_G = 16
+        LED_B = 24
+
+        # Set as output
+        pi.set_mode(LED_R, pigpio.OUTPUT)
+        pi.set_mode(LED_G, pigpio.OUTPUT)
+        pi.set_mode(LED_B, pigpio.OUTPUT)
+
+        # Turn on LED with cyan color (Green + Blue)
+        pi.write(LED_R, 0)   # Red OFF
+        pi.write(LED_G, 1)   # Green ON
+        pi.write(LED_B, 1)   # Blue ON
+
+        log.info("✓ RGB LED initialized (cyan)")
+        return True
+    except Exception as e:
+        log.warning(f"LED initialization failed: {e}")
+        return False
+
+
 # --- Sensor Readers ----------------------------------------------------------
 class EnviroSensors:
     """Reads all Enviro+ sensors."""
@@ -114,9 +178,16 @@ class EnviroSensors:
             "device_id": DEVICE_ID,
         }
 
-        # BME280: temperature, pressure, humidity
+        # BME280: temperature (with CPU compensation), pressure, humidity
         try:
-            data["temperature"] = round(self.bme280.get_temperature(), 2)
+            raw_temp = self.bme280.get_temperature()
+            cpu_temp = get_cpu_temperature()
+            compensated_temp = compensate_temperature(raw_temp, cpu_temp, TEMP_COMPENSATION_FACTOR)
+
+            # Store both raw and compensated for logging
+            data["_raw_temperature"] = round(raw_temp, 2)  # Internal use only, not saved to DB
+            data["_cpu_temperature"] = round(cpu_temp, 2) if cpu_temp else None
+            data["temperature"] = round(compensated_temp, 2)
             data["pressure"] = round(self.bme280.get_pressure(), 2)
             data["humidity"] = round(self.bme280.get_humidity(), 2)
         except Exception as e:
@@ -252,25 +323,37 @@ def run(interval: int = 0, show_lcd: bool = False):
     sensors = EnviroSensors()
     client = get_supabase_client()
 
+    # Initialize RGB LED
+    init_led()
+
     log.info(f"Starting Enviro+ Monitor | device={DEVICE_ID}")
     log.info(f"Supabase: {'connected' if client else 'disabled'}")
     log.info(f"Sensors: {'real' if HAS_SENSORS else 'mock'}")
     log.info(f"PM sensor: {'yes' if HAS_PM_SENSOR else 'no'}")
+    log.info(f"Temperature compensation: factor={TEMP_COMPENSATION_FACTOR}")
     log.info(f"Interval: {interval}s" if interval else "Single reading mode")
 
     while True:
         data = sensors.read_all()
 
-        # Print locally
-        log.info(f"Reading: temp={data.get('temperature')}°C "
+        # Print locally with temperature compensation info
+        temp_info = f"temp={data.get('temperature')}°C"
+        if data.get('_raw_temperature'):
+            raw = data.get('_raw_temperature')
+            cpu = data.get('_cpu_temperature')
+            temp_info += f" (raw={raw}°C, cpu={cpu}°C)"
+
+        log.info(f"Reading: {temp_info} "
                  f"hum={data.get('humidity')}% "
                  f"press={data.get('pressure')} hPa "
                  f"lux={data.get('lux')} "
                  f"pm25={data.get('pm25')}")
 
-        # Push to Supabase
+        # Push to Supabase (remove internal fields first)
         if client:
-            push_to_supabase(client, data)
+            # Create a copy without internal fields
+            db_data = {k: v for k, v in data.items() if not k.startswith('_')}
+            push_to_supabase(client, db_data)
 
         # LCD display
         if show_lcd:

@@ -20,6 +20,19 @@ const TIME_RANGES = [
 ];
 
 // ─── Sensor Config ──────────────────────────────────────────────────────────
+// Individual sensors for single charts
+const INDIVIDUAL_SENSORS = [
+  { key: 'temperature', label: 'Temperature', unit: '°C', color: '#fb7185', icon: '🌡️', decimals: 1 },
+  { key: 'humidity', label: 'Humidity', unit: '%', color: '#60a5fa', icon: '💧', decimals: 1 },
+  { key: 'pressure', label: 'Pressure', unit: 'hPa', color: '#a78bfa', icon: '🔵', decimals: 0 },
+  { key: 'lux', label: 'Light', unit: 'lux', color: '#fbbf24', icon: '☀️', decimals: 0 },
+  { key: 'noise_level', label: 'Noise', unit: '', color: '#f472b6', icon: '🔊', decimals: 3 },
+  { key: 'gas_oxidising', label: 'Oxidising', unit: 'kΩ', color: '#2dd4bf', icon: '🧪', decimals: 1 },
+  { key: 'gas_reducing', label: 'Reducing', unit: 'kΩ', color: '#4ade80', icon: '🧪', decimals: 1 },
+  { key: 'gas_nh3', label: 'NH₃', unit: 'kΩ', color: '#fb923c', icon: '🧪', decimals: 1 },
+];
+
+// Grouped sensors for combined charts
 const SENSOR_GROUPS = [
   {
     title: 'Climate',
@@ -108,15 +121,82 @@ function StatCard({ label, value, unit, color, icon }) {
   return (
     <div className="card-glow p-4">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-white/40 uppercase tracking-wider">{label}</span>
+        <span className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>{label}</span>
         {icon && <span className="text-sm">{icon}</span>}
       </div>
       <div className="flex items-baseline gap-1.5">
         <span className="text-2xl font-mono font-semibold" style={{ color }}>
           {value ?? '—'}
         </span>
-        <span className="text-xs text-white/30">{unit}</span>
+        <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{unit}</span>
       </div>
+    </div>
+  );
+}
+
+// ─── Individual Sensor Chart ────────────────────────────────────────────────
+function SingleSensorChart({ sensor, data, range }) {
+  const hasData = data.length > 0 && data.some(d => d[sensor.key] != null);
+
+  return (
+    <div className="card-glow p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-base">{sensor.icon}</span>
+        <h3 className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{sensor.label}</h3>
+        <span className="text-[10px] ml-auto" style={{ color: 'var(--text-tertiary)' }}>{sensor.unit}</span>
+      </div>
+      {hasData ? (
+        <ResponsiveContainer width="100%" height={120}>
+          <AreaChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+            <defs>
+              <linearGradient id={`grad-single-${sensor.key}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={sensor.color} stopOpacity={0.3} />
+                <stop offset="100%" stopColor={sensor.color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+            <XAxis
+              dataKey="time"
+              tick={{ fill: 'rgba(255,255,255,0.25)', fontSize: 9 }}
+              axisLine={{ stroke: 'rgba(255,255,255,0.05)' }}
+              tickLine={false}
+            />
+            <YAxis
+              tick={{ fill: 'rgba(255,255,255,0.25)', fontSize: 9 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <Tooltip
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                return (
+                  <div className="rounded-lg px-2.5 py-1.5 shadow-xl text-xs" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-color)' }}>
+                    <p className="text-[10px] mb-0.5" style={{ color: 'var(--text-tertiary)' }}>{payload[0].payload.time}</p>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: sensor.color }} />
+                      <span className="font-mono font-medium" style={{ color: 'var(--text-primary)' }}>{payload[0].value}</span>
+                      <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>{sensor.unit}</span>
+                    </div>
+                  </div>
+                );
+              }}
+            />
+            <Area
+              type="monotone"
+              dataKey={sensor.key}
+              stroke={sensor.color}
+              strokeWidth={2}
+              fill={`url(#grad-single-${sensor.key})`}
+              dot={false}
+              connectNulls
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      ) : (
+        <div className="h-[120px] flex items-center justify-center text-xs" style={{ color: 'var(--text-tertiary)', opacity: 0.5 }}>
+          No data
+        </div>
+      )}
     </div>
   );
 }
@@ -129,7 +209,7 @@ function ChartPanel({ title, icon, sensors, data, range }) {
     <div className="card-glow p-5">
       <div className="flex items-center gap-2 mb-4">
         <span>{icon}</span>
-        <h3 className="text-sm font-semibold text-white/80">{title}</h3>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>{title}</h3>
       </div>
       {hasData ? (
         <ResponsiveContainer width="100%" height={220}>
@@ -176,7 +256,7 @@ function ChartPanel({ title, icon, sensors, data, range }) {
           </AreaChart>
         </ResponsiveContainer>
       ) : (
-        <div className="h-[220px] flex items-center justify-center text-white/20 text-sm">
+        <div className="h-[220px] flex items-center justify-center text-sm" style={{ color: 'var(--text-tertiary)', opacity: 0.5 }}>
           No data available for this period
         </div>
       )}
@@ -212,25 +292,25 @@ function SystemInfoPanel({ data, range, devices }) {
     <div className="card-glow p-5">
       <div className="flex items-center gap-2 mb-4">
         <span>📊</span>
-        <h3 className="text-sm font-semibold text-white/80">System Info</h3>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>System Info</h3>
       </div>
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="bg-surface-1/50 rounded-lg p-3">
-          <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Data Points</div>
+        <div className="rounded-lg p-3" style={{ background: 'var(--surface-2)', opacity: 0.7 }}>
+          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--text-tertiary)' }}>Data Points</div>
           <div className="text-2xl font-mono font-semibold text-cyan-400">{totalReadings}</div>
         </div>
-        <div className="bg-surface-1/50 rounded-lg p-3">
-          <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Update Rate</div>
-          <div className="text-2xl font-mono font-semibold text-emerald-400">{readingsPerHour}<span className="text-sm text-white/30">/h</span></div>
+        <div className="rounded-lg p-3" style={{ background: 'var(--surface-2)', opacity: 0.7 }}>
+          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--text-tertiary)' }}>Update Rate</div>
+          <div className="text-2xl font-mono font-semibold text-emerald-400">{readingsPerHour}<span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>/h</span></div>
         </div>
-        <div className="bg-surface-1/50 rounded-lg p-3">
-          <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Active Devices</div>
+        <div className="rounded-lg p-3" style={{ background: 'var(--surface-2)', opacity: 0.7 }}>
+          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--text-tertiary)' }}>Active Devices</div>
           <div className="text-2xl font-mono font-semibold text-purple-400">{activeDeviceCount}</div>
         </div>
-        <div className="bg-surface-1/50 rounded-lg p-3">
-          <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Time Range</div>
+        <div className="rounded-lg p-3" style={{ background: 'var(--surface-2)', opacity: 0.7 }}>
+          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--text-tertiary)' }}>Time Range</div>
           <div className="text-2xl font-mono font-semibold text-amber-400">{range.label}</div>
         </div>
       </div>
@@ -283,7 +363,7 @@ function SystemInfoPanel({ data, range, devices }) {
           </AreaChart>
         </ResponsiveContainer>
       ) : (
-        <div className="h-[100px] flex items-center justify-center text-white/20 text-xs">
+        <div className="h-[100px] flex items-center justify-center text-xs" style={{ color: 'var(--text-tertiary)', opacity: 0.5 }}>
           No activity data
         </div>
       )}
@@ -301,9 +381,25 @@ export default function Dashboard() {
   const [selectedDevice, setSelectedDevice] = useState('all');
   const [devices, setDevices] = useState([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [theme, setTheme] = useState('dark');
 
   // Device settings hook
   const deviceSettings = useDeviceSettings();
+
+  // Theme toggle effect
+  useEffect(() => {
+    // Load theme from localStorage
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    setTheme(savedTheme);
+    document.documentElement.setAttribute('data-theme', savedTheme);
+  }, []);
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
+  };
 
   // Fetch available devices
   const fetchDevices = useCallback(async () => {
@@ -422,7 +518,7 @@ export default function Dashboard() {
       <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
               Ambience Monitor
             </h1>
             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
@@ -430,17 +526,49 @@ export default function Dashboard() {
               <span className="text-[10px] text-emerald-400 font-medium uppercase tracking-wider">Live</span>
             </div>
           </div>
-          <p className="text-xs text-white/30">
+          <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
             {latest?.device_id ? deviceSettings.getDeviceInfo(latest.device_id).displayName : 'rpi-enviro-01'} &middot;{' '}
             {lastUpdate ? `Updated ${format(lastUpdate, 'HH:mm:ss')}` : 'Connecting...'} &middot; BaoT
           </p>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3">
+          {/* Theme Toggle Button */}
+          <button
+            onClick={toggleTheme}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+            style={{
+              background: 'var(--surface-2)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-secondary)'
+            }}
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            {theme === 'dark' ? (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                Light
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+                Dark
+              </>
+            )}
+          </button>
           {/* Settings Button */}
           <button
             onClick={() => setSettingsOpen(true)}
-            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-surface-2 border border-white/5 text-white/60 hover:text-white/80 hover:border-white/10 transition-all"
+            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+            style={{
+              background: 'var(--surface-2)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-secondary)'
+            }}
             title="Device Settings"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -450,14 +578,14 @@ export default function Dashboard() {
             Settings
           </button>
           {/* Device Selector */}
-          <div className="flex gap-1 p-1 bg-surface-2 rounded-lg border border-white/5">
+          <div className="flex gap-1 p-1 rounded-lg" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-color)' }}>
             <button
               onClick={() => setSelectedDevice('all')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap ${
-                selectedDevice === 'all'
-                  ? 'bg-purple-500/20 text-purple-400 shadow-sm'
-                  : 'text-white/40 hover:text-white/60'
-              }`}
+              className="px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap"
+              style={selectedDevice === 'all'
+                ? { background: 'rgba(168, 85, 247, 0.2)', color: '#a78bfa' }
+                : { color: 'var(--text-tertiary)' }
+              }
             >
               All Devices
             </button>
@@ -467,11 +595,11 @@ export default function Dashboard() {
                 <button
                   key={deviceId}
                   onClick={() => setSelectedDevice(deviceId)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap relative group ${
-                    selectedDevice === deviceId
-                      ? 'bg-purple-500/20 text-purple-400 shadow-sm'
-                      : 'text-white/40 hover:text-white/60'
-                  }`}
+                  className="px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap relative group"
+                  style={selectedDevice === deviceId
+                    ? { background: 'rgba(168, 85, 247, 0.2)', color: '#a78bfa' }
+                    : { color: 'var(--text-tertiary)' }
+                  }
                   title={deviceInfo.note || deviceInfo.location || deviceId}
                 >
                   <span>{deviceInfo.displayName}</span>
@@ -480,13 +608,15 @@ export default function Dashboard() {
                   )}
                   {/* Tooltip for note */}
                   {deviceInfo.note && (
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-surface-1 border border-white/20 rounded-lg shadow-xl text-xs text-white/80 whitespace-normal max-w-xs opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50">
-                      <div className="font-medium text-white mb-1">{deviceInfo.displayName}</div>
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 rounded-lg shadow-xl text-xs whitespace-normal max-w-xs opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50"
+                      style={{ background: 'var(--surface-1)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}
+                    >
+                      <div className="font-medium mb-1" style={{ color: 'var(--text-primary)' }}>{deviceInfo.displayName}</div>
                       {deviceInfo.location && (
-                        <div className="text-white/50 text-[10px] mb-1">📍 {deviceInfo.location}</div>
+                        <div className="text-[10px] mb-1" style={{ color: 'var(--text-tertiary)' }}>📍 {deviceInfo.location}</div>
                       )}
-                      <div className="text-white/70">{deviceInfo.note}</div>
-                      <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-surface-1 border-r border-b border-white/20 rotate-45" />
+                      <div style={{ color: 'var(--text-secondary)' }}>{deviceInfo.note}</div>
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 rotate-45" style={{ background: 'var(--surface-1)', borderRight: '1px solid var(--border-color)', borderBottom: '1px solid var(--border-color)' }} />
                     </div>
                   )}
                 </button>
@@ -495,16 +625,16 @@ export default function Dashboard() {
           </div>
 
           {/* Time Range Selector */}
-          <div className="flex gap-1 p-1 bg-surface-2 rounded-lg border border-white/5">
+          <div className="flex gap-1 p-1 rounded-lg" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-color)' }}>
             {TIME_RANGES.map(r => (
               <button
                 key={r.label}
                 onClick={() => setRange(r)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                  range.label === r.label
-                    ? 'bg-teal-500/20 text-teal-400 shadow-sm'
-                    : 'text-white/40 hover:text-white/60'
-                }`}
+                className="px-3 py-1.5 text-xs font-medium rounded-md transition-all"
+                style={range.label === r.label
+                  ? { background: 'rgba(20, 184, 166, 0.2)', color: 'var(--accent-teal)' }
+                  : { color: 'var(--text-tertiary)' }
+                }
               >
                 {r.label}
               </button>
@@ -514,7 +644,7 @@ export default function Dashboard() {
       </header>
 
       {/* Current Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
         {/* AQI Status - Hidden as PMS5003 not connected */}
         {/* Uncomment when PMS5003 is connected
         <div className="col-span-2 card-glow p-4"
@@ -537,17 +667,30 @@ export default function Dashboard() {
         <StatCard label="Humidity" value={latest?.humidity?.toFixed(1)} unit="%" color="#60a5fa" icon="💧" />
         <StatCard label="Pressure" value={latest?.pressure?.toFixed(0)} unit="hPa" color="#a78bfa" icon="🔵" />
         <StatCard label="Light" value={latest?.lux?.toFixed(0)} unit="lux" color="#fbbf24" icon="☀️" />
+        <StatCard label="Noise" value={latest?.noise_level?.toFixed(3)} unit="" color="#f472b6" icon="🔊" />
       </div>
 
       {/* Loading state */}
       {loading && data.length === 0 && (
         <div className="flex items-center justify-center py-20">
-          <div className="animate-spin w-6 h-6 border-2 border-teal-400 border-t-transparent rounded-full" />
-          <span className="ml-3 text-white/40 text-sm">Loading sensor data...</span>
+          <div className="animate-spin w-6 h-6 border-2 rounded-full" style={{ borderColor: 'var(--accent-teal)', borderTopColor: 'transparent' }} />
+          <span className="ml-3 text-sm" style={{ color: 'var(--text-tertiary)' }}>Loading sensor data...</span>
         </div>
       )}
 
-      {/* Charts Grid */}
+      {/* Individual Sensor Charts */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3 mb-6">
+        {INDIVIDUAL_SENSORS.map(sensor => (
+          <SingleSensorChart
+            key={sensor.key}
+            sensor={sensor}
+            data={data}
+            range={range}
+          />
+        ))}
+      </div>
+
+      {/* Grouped Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {SENSOR_GROUPS.map(group => (
           <ChartPanel
@@ -568,7 +711,7 @@ export default function Dashboard() {
       </div>
 
       {/* Footer */}
-      <footer className="mt-10 text-center text-[10px] text-white/15">
+      <footer className="mt-10 text-center text-[10px]" style={{ color: 'var(--text-tertiary)', opacity: 0.5 }}>
         Enviro+ Monitor &middot; Raspberry Pi 4B &middot; PIM458 &middot; Supabase + Vercel
       </footer>
 
