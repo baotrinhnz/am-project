@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { useDeviceSettings } from '../hooks/useDeviceSettings';
 import SettingsModal from '../components/SettingsModal';
+import MusicDetections from '../components/MusicDetections';
 
 // ─── Time Range Options ─────────────────────────────────────────────────────
 const TIME_RANGES = [
@@ -707,6 +708,11 @@ export default function Dashboard() {
           data={data}
           range={range}
           devices={devices}
+        />
+        {/* Music Detections Panel */}
+        <MusicDetections
+          deviceId={selectedDevice}
+          isDarkMode={theme === 'dark'}
         />
       </div>
 
