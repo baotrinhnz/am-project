@@ -1,0 +1,24 @@
+# SSH vào Pi
+ssh am@10.0.1.243
+# Password: amam
+
+# Sau khi vào Pi, chạy từng lệnh sau:
+
+# 1. Cài dependencies (chạy từng dòng)
+sudo apt-get update
+sudo apt-get install -y portaudio19-dev alsa-utils python3-pip
+
+# 2. Cài Python packages
+pip3 install sounddevice numpy scipy supabase python-dotenv requests
+
+# 3. Hoặc nếu không cài được sounddevice, bỏ qua nó (dùng arecord)
+pip3 install numpy scipy supabase python-dotenv requests
+
+# 4. Test xem có arecord không
+arecord -l
+
+# 5. Kill process cũ
+pkill -f music_manual_trigger.py
+
+# 6. Chạy service
+python3 music_manual_trigger.py
