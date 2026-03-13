@@ -3,17 +3,22 @@
 Enviro+ Air Quality Monitor → Supabase
 ========================================
 Reads all sensors from Pimoroni Enviro+ (PIM458) and pushes data to Supabase.
+Now includes music recognition using the MEMS microphone!
 
 Setup on Raspberry Pi:
     sudo apt update && sudo apt install -y python3-pip
     pip3 install enviroplus supabase-py python-dotenv
     # If using PMS5003 PM sensor:
     pip3 install pms5003
+    # For music recognition:
+    pip3 install sounddevice numpy scipy requests
 
 Usage:
     python3 sensor_reader.py                  # Run once
     python3 sensor_reader.py --interval 60    # Run every 60 seconds
     python3 sensor_reader.py --lcd            # Also display on LCD
+    python3 sensor_reader.py --music          # Enable music recognition
+    python3 sensor_reader.py --music-interval 300  # Detect music every 5 minutes
 """
 
 import os
@@ -307,6 +312,51 @@ def display_on_lcd(data: dict):
         log.debug(f"LCD display error: {e}")
 
 
+# --- Music Recognition -------------------------------------------------------
+def detect_and_save_music(client):
+    """Detect music and save to Supabase."""
+    try:
+        from music_recognizer import MusicRecognizer
+
+        log.info("🎵 Starting music detection...")
+        recognizer = MusicRecognizer()
+
+        # Record and recognize
+        result = recognizer.record_and_recognize()
+
+        if result:
+            log.info(f"✓ Music detected: {result['title']} by {result['artist']}")
+
+            # Save to Supabase if client available
+            if client:
+                try:
+                    # Save to music_detections table
+                    client.table("music_detections").insert({
+                        'device_id': result['device_id'],
+                        'title': result['title'],
+                        'artist': result['artist'],
+                        'album': result['album'],
+                        'spotify_url': result.get('spotify_url'),
+                        'apple_music_url': result.get('apple_music_url'),
+                        'detected_at': result['detected_at']
+                    }).execute()
+                    log.info("✓ Music detection saved to Supabase")
+                except Exception as e:
+                    log.error(f"Failed to save music detection: {e}")
+
+            return result
+        else:
+            log.info("No music detected")
+            return None
+
+    except ImportError:
+        log.error("music_recognizer module not found. Music detection disabled.")
+        return None
+    except Exception as e:
+        log.error(f"Music detection error: {e}")
+        return None
+
+
 # --- Main Loop ---------------------------------------------------------------
 def push_to_supabase(client, data: dict):
     """Insert a reading into Supabase."""
@@ -319,7 +369,7 @@ def push_to_supabase(client, data: dict):
         return False
 
 
-def run(interval: int = 0, show_lcd: bool = False):
+def run(interval: int = 0, show_lcd: bool = False, music_detection: bool = False, music_interval: int = 300):
     sensors = EnviroSensors()
     client = get_supabase_client()
 
@@ -331,7 +381,13 @@ def run(interval: int = 0, show_lcd: bool = False):
     log.info(f"Sensors: {'real' if HAS_SENSORS else 'mock'}")
     log.info(f"PM sensor: {'yes' if HAS_PM_SENSOR else 'no'}")
     log.info(f"Temperature compensation: factor={TEMP_COMPENSATION_FACTOR}")
+    log.info(f"Music detection: {'enabled' if music_detection else 'disabled'}")
+    if music_detection:
+        log.info(f"Music detection interval: {music_interval}s")
     log.info(f"Interval: {interval}s" if interval else "Single reading mode")
+
+    # Track last music detection time
+    last_music_detection = 0
 
     while True:
         data = sensors.read_all()
@@ -359,6 +415,19 @@ def run(interval: int = 0, show_lcd: bool = False):
         if show_lcd:
             display_on_lcd(data)
 
+        # Music detection (if enabled and it's time)
+        if music_detection:
+            current_time = time.time()
+            if current_time - last_music_detection >= music_interval:
+                # Check if noise level is high enough (music might be playing)
+                noise_level = data.get('noise_level', 0)
+                if noise_level is None or noise_level > 0.01:  # Threshold for detection
+                    log.info(f"Noise level: {noise_level} - triggering music detection")
+                    detect_and_save_music(client)
+                    last_music_detection = current_time
+                else:
+                    log.debug(f"Noise too low ({noise_level}) - skipping music detection")
+
         # Single run or loop
         if interval <= 0:
             break
@@ -371,10 +440,17 @@ if __name__ == "__main__":
                         help="Seconds between readings (0 = single reading)")
     parser.add_argument("--lcd", action="store_true",
                         help="Display readings on the Enviro+ LCD")
+    parser.add_argument("--music", action="store_true",
+                        help="Enable music recognition")
+    parser.add_argument("--music-interval", type=int, default=300,
+                        help="Seconds between music detection attempts (default: 300)")
     args = parser.parse_args()
 
     try:
-        run(interval=args.interval, show_lcd=args.lcd)
+        run(interval=args.interval,
+            show_lcd=args.lcd,
+            music_detection=args.music,
+            music_interval=args.music_interval)
     except KeyboardInterrupt:
         log.info("Stopped by user.")
         sys.exit(0)
