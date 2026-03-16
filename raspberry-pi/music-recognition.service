@@ -1,0 +1,18 @@
+[Unit]
+Description=Music Recognition Service for Enviro+
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=am
+WorkingDirectory=/home/am
+Environment="PATH=/usr/bin:/usr/local/bin:/home/am/.local/bin"
+ExecStart=/usr/bin/python3 /home/am/music_manual_trigger_rotation.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/am/music_service.log
+StandardError=append:/home/am/music_service.log
+
+[Install]
+WantedBy=multi-user.target

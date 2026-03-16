@@ -4,12 +4,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { format, subHours, subDays, parseISO } from 'date-fns';
 import {
-  LineChart, Line, AreaChart, Area, XAxis, YAxis,
+  AreaChart, Area, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 import { useDeviceSettings } from '../hooks/useDeviceSettings';
 import SettingsModal from '../components/SettingsModal';
 import MusicDetections from '../components/MusicDetections';
+import SimpleServiceStatus from '../components/SimpleServiceStatus';
+
 
 // ─── Time Range Options ─────────────────────────────────────────────────────
 const TIME_RANGES = [
@@ -382,6 +384,7 @@ export default function Dashboard() {
   const [selectedDevice, setSelectedDevice] = useState('all');
   const [devices, setDevices] = useState([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [musicSectionOpen, setMusicSectionOpen] = useState(false);
   const [theme, setTheme] = useState('dark');
 
   // Device settings hook
@@ -529,7 +532,7 @@ export default function Dashboard() {
           </div>
           <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
             {latest?.device_id ? deviceSettings.getDeviceInfo(latest.device_id).displayName : 'rpi-enviro-01'} &middot;{' '}
-            {lastUpdate ? `Updated ${format(lastUpdate, 'HH:mm:ss')}` : 'Connecting...'} &middot; BaoT
+            {lastUpdate ? `Updated ${format(lastUpdate, 'HH:mm:ss')} · ${format(lastUpdate, 'MMM d')}` : 'Connecting...'} &middot; BaoT
           </p>
         </div>
 
@@ -560,6 +563,17 @@ export default function Dashboard() {
                 Dark
               </>
             )}
+          </button>
+          {/* Music Recognise Button */}
+          <button
+            onClick={() => setMusicSectionOpen(o => !o)}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+            style={musicSectionOpen
+              ? { background: 'rgba(96,165,250,0.15)', border: '1px solid rgba(96,165,250,0.3)', color: '#60a5fa' }
+              : { background: 'var(--surface-2)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }
+            }
+          >
+            🎵 Music Recognise
           </button>
           {/* Settings Button */}
           <button
@@ -625,6 +639,9 @@ export default function Dashboard() {
             })}
           </div>
 
+          {/* Service Status Indicators */}
+          <SimpleServiceStatus />
+
           {/* Time Range Selector */}
           <div className="flex gap-1 p-1 rounded-lg" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-color)' }}>
             {TIME_RANGES.map(r => (
@@ -643,6 +660,17 @@ export default function Dashboard() {
           </div>
         </div>
       </header>
+
+      {/* Music Section */}
+      {musicSectionOpen && (
+        <div className="mb-6">
+          <MusicDetections
+            devices={devices}
+            deviceSettings={deviceSettings}
+            isDarkMode={theme === 'dark'}
+          />
+        </div>
+      )}
 
       {/* Current Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
@@ -708,11 +736,6 @@ export default function Dashboard() {
           data={data}
           range={range}
           devices={devices}
-        />
-        {/* Music Detections Panel */}
-        <MusicDetections
-          deviceId={selectedDevice}
-          isDarkMode={theme === 'dark'}
         />
       </div>
 
