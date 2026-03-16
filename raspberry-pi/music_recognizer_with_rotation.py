@@ -15,6 +15,7 @@ Key design decisions:
 import os
 import re
 import logging
+import logging.handlers
 import requests
 import subprocess
 import glob
@@ -29,6 +30,24 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 log = logging.getLogger("music-recognizer")
+
+# Dedicated detection log — records only recording & AudD events
+# Rotates daily, keeps 30 days
+_detection_log_path = Path.home() / "music_detection_log.txt"
+_detection_handler = logging.handlers.TimedRotatingFileHandler(
+    _detection_log_path,
+    when="midnight",
+    interval=1,
+    backupCount=30,
+    encoding="utf-8"
+)
+_detection_handler.setFormatter(logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+))
+detection_log = logging.getLogger("music-detection")
+detection_log.setLevel(logging.INFO)
+detection_log.addHandler(_detection_handler)
+detection_log.propagate = False
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -164,6 +183,8 @@ class MusicRecognizer:
 
         log.info(f"Recording {self.duration}s from {self.device} → {output_file}")
         log.info("Make sure music is playing near the device!")
+        detection_log.info(f"--- Detection started ---")
+        detection_log.info(f"Recording {self.duration}s | device={self.device} | file={output_file.name}")
 
         cmd = [
             'arecord',
@@ -182,11 +203,13 @@ class MusicRecognizer:
             if result.returncode == 0:
                 size = output_file.stat().st_size if output_file.exists() else 0
                 log.info(f"Recording done: {output_file} ({size} bytes)")
+                detection_log.info(f"Recording done | size={size} bytes | {'OK' if size > 0 else 'EMPTY'}")
                 recordings = sorted(glob.glob(str(self.save_dir / "music_record*.wav")))
                 log.info(f"Total recordings in folder: {len(recordings)}")
                 return output_file
             else:
                 log.error(f"arecord failed (device={self.device}): {result.stderr}")
+                detection_log.error(f"Recording failed | device={self.device} | {result.stderr.strip()}")
                 return None
 
         except FileNotFoundError:
@@ -217,6 +240,7 @@ class MusicRecognizer:
             return {"error": "Recording failed: file is empty (0 bytes)"}
 
         log.info(f"Sending {audio_file} ({file_size} bytes) to AudD API...")
+        detection_log.info(f"Uploading to AudD | file={Path(audio_file).name} | size={file_size} bytes")
 
         try:
             with open(audio_file, 'rb') as f:
@@ -227,7 +251,7 @@ class MusicRecognizer:
                         'return': 'spotify,deezer,musicbrainz'
                     },
                     files={'file': f},
-                    timeout=30
+                    timeout=60
                 )
 
             if response.status_code == 200:
@@ -236,21 +260,26 @@ class MusicRecognizer:
                 if result.get('status') == 'success' and result.get('result'):
                     song = result['result']
                     log.info(f"Detected: {song.get('artist', 'Unknown')} - {song.get('title', 'Unknown')}")
+                    detection_log.info(f"DETECTED | {song.get('artist', 'Unknown')} - {song.get('title', 'Unknown')} | album={song.get('album', '-')}")
                     result['audio_file'] = str(audio_file)
                     result['timestamp'] = datetime.now(timezone.utc).isoformat()
                     return result
                 else:
                     log.warning("No music detected or API returned no result")
+                    detection_log.warning(f"No music detected | AudD status={result.get('status')} | error={result.get('error', {}).get('error_message', '-')}")
                     return {"error": "No music detected", "api_response": result}
             else:
                 log.error(f"AudD API error: {response.status_code} — {response.text}")
+                detection_log.error(f"AudD API error | HTTP {response.status_code} | {response.text[:100]}")
                 return {"error": f"API error: {response.status_code}"}
 
         except requests.exceptions.Timeout:
             log.error("AudD API timeout")
+            detection_log.error("AudD API timeout (>60s) — network slow or AudD unavailable")
             return {"error": "API timeout"}
         except Exception as e:
             log.error(f"Recognition failed: {e}")
+            detection_log.error(f"Recognition failed | {e}")
             return {"error": str(e)}
 
     # ------------------------------------------------------------------
