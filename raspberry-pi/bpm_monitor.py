@@ -156,7 +156,7 @@ def record_audio(device: str, duration: int) -> Path | None:
     # Boost 15dB — MEMS mic is very quiet
     boosted = out.with_suffix('.boosted.wav')
     boost_result = subprocess.run(
-        ['sox', str(out), str(boosted), 'vol', '15dB'],
+        ['sox', str(out), str(boosted), 'norm', '-3'],
         capture_output=True, text=True
     )
     out.unlink(missing_ok=True)

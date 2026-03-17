@@ -224,7 +224,7 @@ class MusicRecognizer:
                 # Boost volume 10dB with sox so AudD can fingerprint better
                 boosted_file = output_file.with_suffix('.boosted.wav')
                 boost = subprocess.run(
-                    ['sox', str(output_file), str(boosted_file), 'gain', '15'],
+                    ['sox', str(output_file), str(boosted_file), 'norm', '-3'],
                     capture_output=True, text=True
                 )
                 if boost.returncode == 0 and boosted_file.exists():
