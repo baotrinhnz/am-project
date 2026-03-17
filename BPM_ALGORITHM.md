@@ -27,14 +27,21 @@ Mỗi 15 giây, Pi ghi 5 giây âm thanh rồi tính BPM một lần.
 
 ### 2. Phân tích beat — thư viện aubio
 
-Dùng `aubio.tempo("default", win_s=1024, hop_s=512, samplerate=48000)`:
+aubio không "nghe" cả file rồi mới tính — nó xử lý âm thanh **từng mảnh nhỏ liên tiếp**, giống như tai người nghe nhạc theo thời gian thực.
 
-- File WAV được đọc từng **chunk 512 mẫu** (~10.7ms mỗi chunk)
-- Mỗi chunk được nạp vào bộ phát hiện tempo của aubio
-- Khi aubio xác định có beat tại chunk đó → ghi lại **timestamp (giây)**
+**Chia nhỏ âm thanh:**
+File 5 giây ở 48kHz có 240.000 mẫu. aubio đọc từng đoạn 512 mẫu một (~10ms mỗi đoạn), tức khoảng 470 lần trong 5 giây. Mỗi lần đọc, nó hỏi: *"có beat ở đây không?"*
 
-**aubio hoạt động như thế nào bên trong:**
-aubio dùng thuật toán **onset detection** — tìm các điểm âm thanh tăng đột ngột về năng lượng (onset), sau đó tính khoảng cách giữa các onset để suy ra BPM. Không phải đếm từng tiếng trống, mà là phân tích sự thay đổi năng lượng theo thời gian.
+**aubio phát hiện beat bằng cách nào:**
+Tai người nhận ra beat vì có sự thay đổi đột ngột — tiếng trống đánh xuống, tiếng bass bật lên, âm thanh bỗng to hơn. aubio làm điều tương tự: nó theo dõi **mức năng lượng** của âm thanh theo từng đoạn nhỏ. Khi năng lượng tăng vọt so với trước đó, đó được gọi là một **onset** — điểm bắt đầu của một âm.
+
+Nhưng onset chưa phải beat. Tiếng nói, tiếng cốc chén cũng tạo ra onset. Điểm khác biệt là **nhịp điệu**: trong nhạc, các onset xảy ra đều đặn theo chu kỳ. aubio tích lũy các onset theo thời gian và tìm kiếm **chu kỳ lặp lại** — nếu onset cứ xuất hiện mỗi 0.5 giây thì BPM = 120.
+
+**Window size — nhìn đủ rộng để thấy pattern:**
+Để phát hiện chu kỳ, aubio không chỉ nhìn vào 512 mẫu hiện tại mà nhìn ngược lại một cửa sổ 1024 mẫu (~21ms). Cửa sổ này đủ rộng để so sánh "bây giờ" với "vừa rồi" và phát hiện sự thay đổi có nghĩa, loại bỏ các biến động nhỏ ngẫu nhiên.
+
+**Kết quả sau 5 giây:**
+aubio thu thập tất cả các thời điểm beat trong suốt 5 giây, sau đó tổng hợp lại thành một con số BPM duy nhất — không phải trung bình cộng đơn giản mà là ước lượng có trọng số, ưu tiên các beat gần đây hơn và các beat có độ tin cậy cao hơn.
 
 ### 3. Lấy BPM từ aubio
 
