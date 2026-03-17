@@ -10,7 +10,6 @@ Cycle: record 5s → detect BPM → insert to Supabase → sleep 10s → repeat
 """
 
 import os
-import re
 import time
 import logging
 import logging.handlers
@@ -29,16 +28,16 @@ SUPABASE_URL  = os.getenv("SUPABASE_URL")
 SUPABASE_KEY  = os.getenv("SUPABASE_SERVICE_KEY")
 DEVICE_ID     = os.getenv("DEVICE_ID", "rpi-enviro-01")
 
-RECORD_DURATION = 8      # seconds per sample
+RECORD_DURATION = 5      # seconds per sample
 SLEEP_INTERVAL  = 10     # seconds between samples
-SAMPLE_RATE     = 44100  # 44100Hz S16_LE avoids I2S crackling at 48kHz on Pi
+SAMPLE_RATE     = 48000  # 48kHz native rate of adau7002 I2S mic
 CHANNELS        = 2
-FORMAT          = "S16_LE"
+FORMAT          = "S32_LE"
 
 SAVE_DIR        = Path.home() / "Music_beating"
 MAX_FILES       = 10     # rotate after 10 files
 
-MEMS_KEYWORDS = ['iq', 'mems', 'sndrpii', 'dmic', 'ics43', 'enviro', 'i2s', 'adau']
+ALSA_DEVICE   = "plughw:adau7002"  # name-based — survives reboot card renumbering
 
 MIC_LOCK      = Path('/tmp/mic_in_use.lock')       # held while recording
 PRIORITY_LOCK = Path('/tmp/music_detection_active.lock')  # music detection wants mic
@@ -61,42 +60,6 @@ _file_handler.setFormatter(logging.Formatter(
 log.addHandler(_file_handler)
 
 
-# ── Mic detection ─────────────────────────────────────────────────────────────
-def find_mems_device() -> str:
-    """Find MEMS mic by name so card number changes on reboot don't break it."""
-    try:
-        result = subprocess.run(['arecord', '-l'], capture_output=True, text=True)
-        if result.returncode != 0:
-            return "plughw:2,0"
-
-        for line in result.stdout.splitlines():
-            line_lower = line.lower()
-            if 'card' not in line_lower or 'hdmi' in line_lower:
-                continue
-            if any(kw in line_lower for kw in MEMS_KEYWORDS):
-                match = re.search(r'card\s+(\d+):.*device\s+(\d+):', line)
-                if match:
-                    device = f"plughw:{match.group(1)},{match.group(2)}"
-                    log.info(f"Found MEMS mic: {device} — {line.strip()}")
-                    return device
-
-        # Fallback: last non-HDMI capture device
-        last = None
-        for line in result.stdout.splitlines():
-            if 'card' not in line.lower() or 'hdmi' in line.lower():
-                continue
-            match = re.search(r'card\s+(\d+):.*device\s+(\d+):', line)
-            if match:
-                last = f"plughw:{match.group(1)},{match.group(2)}"
-        if last:
-            log.warning(f"MEMS not found by keyword, using: {last}")
-            return last
-
-    except Exception as e:
-        log.warning(f"Device detection error: {e}")
-
-    return "plughw:2,0"
-
 
 # ── Recording ─────────────────────────────────────────────────────────────────
 def _next_file() -> Path:
@@ -111,17 +74,11 @@ def _next_file() -> Path:
 
 
 def record_audio(device: str, duration: int) -> Path | None:
-    """Record audio with priority awareness. Yields immediately if music detection is active."""
+    """Record audio with priority awareness. Skips cycle if music detection is active."""
     # Don't start if music detection already has priority
     if PRIORITY_LOCK.exists():
         log.debug("Music detection active, skipping BPM cycle")
         return None
-
-    # Wait for mic to be free (music_recognizer finishing up)
-    waited = 0
-    while MIC_LOCK.exists() and waited < 15:
-        time.sleep(1)
-        waited += 1
 
     out = _next_file()
     MIC_LOCK.touch()
@@ -133,20 +90,10 @@ def record_audio(device: str, duration: int) -> Path | None:
             '--buffer-size=16384',
             str(out)
         ]
-        proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
+        result = subprocess.run(cmd, capture_output=True)
 
-        # Poll: if music detection claims priority, kill arecord immediately
-        while proc.poll() is None:
-            if PRIORITY_LOCK.exists():
-                proc.terminate()
-                proc.wait(timeout=3)
-                log.info("Yielded mic to music detection")
-                out.unlink(missing_ok=True)
-                return None
-            time.sleep(0.3)
-
-        if proc.returncode != 0 or not out.exists() or out.stat().st_size == 0:
-            log.warning(f"Recording failed (rc={proc.returncode})")
+        if result.returncode != 0 or not out.exists() or out.stat().st_size == 0:
+            log.warning(f"Recording failed (rc={result.returncode})")
             out.unlink(missing_ok=True)
             return None
 
@@ -245,7 +192,7 @@ def main():
     log.info(f"BPM Monitor starting | device={DEVICE_ID}")
 
     supabase = get_supabase()
-    mic = find_mems_device()
+    mic = ALSA_DEVICE
     log.info(f"Using mic: {mic} | cycle: {RECORD_DURATION}s record + {SLEEP_INTERVAL}s sleep")
 
     threshold = fetch_confidence_threshold(supabase)

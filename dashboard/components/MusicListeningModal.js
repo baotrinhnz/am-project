@@ -32,7 +32,7 @@ export default function MusicListeningModal({
     setStatus('listening');
     setDetectedSong(null);
     setError(null);
-    setCountdown(20); // 20 seconds recording for better recognition
+    setCountdown(25); // 25s covers worst case: bpm cycle (5s) + recording (10s) + AudD (~2s)
 
     try {
       // Call API to trigger music detection on Raspberry Pi

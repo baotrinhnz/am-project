@@ -13,6 +13,7 @@ Key design decisions:
 """
 
 import os
+import time
 import logging
 import logging.handlers
 import requests
@@ -21,6 +22,9 @@ import glob
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
+
+MIC_LOCK      = Path('/tmp/mic_in_use.lock')
+PRIORITY_LOCK = Path('/tmp/music_detection_active.lock')
 
 # Setup logging
 logging.basicConfig(
@@ -126,6 +130,11 @@ class MusicRecognizer:
         detection_log.info(f"--- Detection started ---")
         detection_log.info(f"Recording {self.duration}s | device={self.device} | file={output_file.name}")
 
+        PRIORITY_LOCK.touch()
+        waited = 0
+        while MIC_LOCK.exists() and waited < 6:
+            time.sleep(1); waited += 1
+
         cmd = [
             'arecord',
             '-D', self.device,
@@ -171,6 +180,8 @@ class MusicRecognizer:
         except Exception as e:
             log.error(f"Recording failed: {e}")
             return None
+        finally:
+            PRIORITY_LOCK.unlink(missing_ok=True)
 
     # ------------------------------------------------------------------
     # Recognition
