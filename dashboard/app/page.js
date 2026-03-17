@@ -12,6 +12,7 @@ import SettingsModal from '../components/SettingsModal';
 import MusicDetections from '../components/MusicDetections';
 import SimpleServiceStatus from '../components/SimpleServiceStatus';
 import BpmWidget from '../components/BpmWidget';
+import MusicBpmWidget from '../components/MusicBpmWidget';
 
 
 // ─── Time Range Options ─────────────────────────────────────────────────────
@@ -740,9 +741,10 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Music Beat — full width */}
-      <div className="mt-4">
+      {/* Beat Rate — full width, two columns */}
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
         <BpmWidget range={range} deviceId={selectedDevice} />
+        <MusicBpmWidget range={range} deviceId={selectedDevice} />
       </div>
 
       {/* Footer */}
