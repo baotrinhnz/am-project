@@ -11,6 +11,7 @@ import { useDeviceSettings } from '../hooks/useDeviceSettings';
 import SettingsModal from '../components/SettingsModal';
 import MusicDetections from '../components/MusicDetections';
 import SimpleServiceStatus from '../components/SimpleServiceStatus';
+import BpmWidget from '../components/BpmWidget';
 
 
 // ─── Time Range Options ─────────────────────────────────────────────────────
@@ -731,6 +732,9 @@ export default function Dashboard() {
             range={range}
           />
         ))}
+        {/* BPM Widget */}
+        <BpmWidget range={range} deviceId={selectedDevice} />
+
         {/* System Info Panel */}
         <SystemInfoPanel
           data={data}

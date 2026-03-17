@@ -1,0 +1,16 @@
+[Unit]
+Description=BPM Monitor Service for Enviro+
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=am
+WorkingDirectory=/home/am
+Environment="PATH=/usr/bin:/usr/local/bin:/home/am/.local/bin"
+ExecStart=/usr/bin/python3 /home/am/bpm_monitor.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
