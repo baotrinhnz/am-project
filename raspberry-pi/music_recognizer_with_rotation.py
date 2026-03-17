@@ -204,6 +204,18 @@ class MusicRecognizer:
                 size = output_file.stat().st_size if output_file.exists() else 0
                 log.info(f"Recording done: {output_file} ({size} bytes)")
                 detection_log.info(f"Recording done | size={size} bytes | {'OK' if size > 0 else 'EMPTY'}")
+
+                # Boost volume 10dB with sox so AudD can fingerprint better
+                boosted_file = output_file.with_suffix('.boosted.wav')
+                boost = subprocess.run(
+                    ['sox', str(output_file), str(boosted_file), 'gain', '15'],
+                    capture_output=True, text=True
+                )
+                if boost.returncode == 0 and boosted_file.exists():
+                    output_file.unlink()
+                    boosted_file.rename(output_file)
+                    log.info(f"Audio boosted 15dB: {output_file}")
+
                 recordings = sorted(glob.glob(str(self.save_dir / "music_record*.wav")))
                 log.info(f"Total recordings in folder: {len(recordings)}")
                 return output_file
