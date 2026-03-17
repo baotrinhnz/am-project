@@ -265,16 +265,13 @@ def main():
                 time.sleep(SLEEP_INTERVAL)
                 continue
 
-            bpm, confidence = detect_bpm(audio)
+            bpm, _ = detect_bpm(audio)
 
             if bpm is None:
                 log.debug("No beat detected, skipping")
-            elif confidence >= threshold:
-                insert_bpm(supabase, bpm, "music_bpm_readings")
-                log.info(f"Music BPM: {bpm} (confidence={confidence})")
             else:
                 insert_bpm(supabase, bpm, "bpm_readings")
-                log.info(f"Ambient BPM: {bpm} (confidence={confidence})")
+                log.info(f"Ambient BPM: {bpm}")
 
         except Exception as e:
             log.error(f"Cycle error: {e}")
