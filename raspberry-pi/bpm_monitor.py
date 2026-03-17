@@ -15,7 +15,6 @@ import time
 import logging
 import logging.handlers
 import subprocess
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -23,7 +22,6 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
 import aubio
-import numpy as np
 from supabase import create_client
 
 # ── Config ──────────────────────────────────────────────────────────────────
@@ -31,11 +29,14 @@ SUPABASE_URL  = os.getenv("SUPABASE_URL")
 SUPABASE_KEY  = os.getenv("SUPABASE_SERVICE_KEY")
 DEVICE_ID     = os.getenv("DEVICE_ID", "rpi-enviro-01")
 
-RECORD_DURATION = 5      # seconds per sample
+RECORD_DURATION = 8      # seconds per sample
 SLEEP_INTERVAL  = 10     # seconds between samples
 SAMPLE_RATE     = 48000  # MEMS mic native rate
-CHANNELS        = 1
-FORMAT          = "S16_LE"
+CHANNELS        = 2      # Stereo — required by ADAU7002 hardware
+FORMAT          = "S32_LE"  # 32-bit — ADAU7002 native format
+
+SAVE_DIR        = Path.home() / "Music_beating"
+MAX_FILES       = 10     # rotate after 10 files
 
 MEMS_KEYWORDS = ['iq', 'mems', 'sndrpii', 'dmic', 'ics43', 'enviro', 'i2s', 'adau']
 
@@ -95,11 +96,20 @@ def find_mems_device() -> str:
 
 
 # ── Recording ─────────────────────────────────────────────────────────────────
+def _next_file() -> Path:
+    """Return next rotated file path in Music_beating/, delete oldest if over limit."""
+    SAVE_DIR.mkdir(exist_ok=True)
+    files = sorted(SAVE_DIR.glob("bpm_*.wav"))
+    while len(files) >= MAX_FILES:
+        files.pop(0).unlink(missing_ok=True)
+        files = sorted(SAVE_DIR.glob("bpm_*.wav"))
+    idx = len(files) + 1
+    return SAVE_DIR / f"bpm_{idx:03d}.wav"
+
+
 def record_audio(device: str, duration: int) -> Path | None:
-    """Record audio to a temp WAV file. Returns path or None on failure."""
-    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-    tmp.close()
-    out = Path(tmp.name)
+    """Record audio to Music_beating/ with rotation. Returns path or None on failure."""
+    out = _next_file()
 
     cmd = [
         'arecord',
@@ -116,7 +126,19 @@ def record_audio(device: str, duration: int) -> Path | None:
         log.warning(f"Recording failed: {result.stderr.strip()}")
         out.unlink(missing_ok=True)
         return None
-    return out
+
+    # Boost 15dB — MEMS mic is very quiet
+    boosted = out.with_suffix('.boosted.wav')
+    boost_result = subprocess.run(
+        ['sox', str(out), str(boosted), 'vol', '15dB'],
+        capture_output=True, text=True
+    )
+    out.unlink(missing_ok=True)
+    if boost_result.returncode != 0 or not boosted.exists():
+        log.warning("sox boost failed, skipping")
+        boosted.unlink(missing_ok=True)
+        return None
+    return boosted
 
 
 # ── BPM Detection ─────────────────────────────────────────────────────────────
@@ -125,8 +147,8 @@ def detect_bpm(audio_file: Path) -> float | None:
     Returns BPM float or None if no beat detected.
     """
     try:
-        win_s  = 512
-        hop_s  = 256
+        win_s  = 1024
+        hop_s  = 512
 
         source  = aubio.source(str(audio_file), SAMPLE_RATE, hop_s)
         tempo   = aubio.tempo("default", win_s, hop_s, SAMPLE_RATE)
@@ -185,7 +207,6 @@ def main():
                 continue
 
             bpm = detect_bpm(audio)
-            audio.unlink(missing_ok=True)
 
             if bpm:
                 insert_bpm(supabase, bpm)

@@ -68,11 +68,10 @@ class MusicRecognizer:
         if not self.api_token:
             raise ValueError("AUDD_API_TOKEN not provided or found in .env")
 
-        # Audio recording settings — plughw lets ALSA handle hardware format differences
-        # Records directly as 16-bit mono, no Python conversion needed
+        # Audio recording settings — ADAU7002 requires S32_LE stereo
         self.sample_rate = 48000   # MEMS mic native rate
-        self.channels = 1          # Mono — AudD compatible
-        self.format = "S16_LE"     # 16-bit — AudD compatible
+        self.channels = 2          # Stereo — required by ADAU7002 hardware
+        self.format = "S32_LE"     # 32-bit — ADAU7002 native format
         self.duration = 10         # seconds
 
         # Find device by name at startup so reboot doesn't break card numbering
