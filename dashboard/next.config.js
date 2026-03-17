@@ -1,9 +1,8 @@
 /** @type {import('next').NextConfig} */
 
-// Build date as version: YYMMDD.HHMM  e.g. 260317.1845
-const now = new Date();
-const pad = n => String(n).padStart(2, '0');
-const buildVersion = `${String(now.getUTCFullYear()).slice(2)}${pad(now.getUTCMonth()+1)}${pad(now.getUTCDate())}.${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}`;
+// Days since 2026-01-01, zero-padded to 3 digits → format 0.076
+const days = Math.floor((Date.now() - new Date('2026-01-01').getTime()) / 86400000);
+const buildVersion = String(days).padStart(3, '0');
 
 const nextConfig = {
   env: {
