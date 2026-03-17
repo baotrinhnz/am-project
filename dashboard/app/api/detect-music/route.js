@@ -159,10 +159,11 @@ export async function POST(request) {
           break;
         }
       } else if (cmdStatus && cmdStatus.status === 'failed') {
-        return NextResponse.json({
-          success: false,
-          error: 'Device failed to detect music. Please ensure music is playing near the sensor.'
-        });
+        const errType = cmdStatus.result?.error;
+        const msg = errType === 'no_fingerprint'
+          ? 'Không detect được, có thể quá ồn hoặc nhạc quá nhỏ'
+          : 'Ồ, tôi không biết bài hát này';
+        return NextResponse.json({ success: false, error: msg });
       }
 
       attempts++;

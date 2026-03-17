@@ -217,10 +217,12 @@ class MusicRecognizer:
                     result['audio_file'] = str(audio_file)
                     result['timestamp'] = datetime.now(timezone.utc).isoformat()
                     return result
+                elif result.get('status') == 'success' and not result.get('result'):
+                    detection_log.warning(f"No match | AudD processed audio but song not in database")
+                    return {"error": "no_match"}
                 else:
-                    log.warning("No music detected or API returned no result")
-                    detection_log.warning(f"No music detected | AudD status={result.get('status')} | error={result.get('error', {}).get('error_message', '-')}")
-                    return {"error": "No music detected", "api_response": result}
+                    detection_log.warning(f"No fingerprint | AudD error={result.get('error', {}).get('error_message', '-')}")
+                    return {"error": "no_fingerprint"}
             else:
                 log.error(f"AudD API error: {response.status_code} — {response.text}")
                 detection_log.error(f"AudD API error | HTTP {response.status_code} | {response.text[:100]}")
