@@ -1,9 +1,12 @@
 /** @type {import('next').NextConfig} */
 const { execSync } = require('child_process');
+const path = require('path');
 
 let buildVersion = '00';
 try {
-  buildVersion = execSync('git rev-list --count HEAD', { cwd: __dirname }).toString().trim();
+  // .git is in the repo root (parent of dashboard/)
+  const repoRoot = path.resolve(__dirname, '..');
+  buildVersion = execSync('git rev-list --count HEAD', { cwd: repoRoot }).toString().trim();
 } catch {}
 
 const nextConfig = {
