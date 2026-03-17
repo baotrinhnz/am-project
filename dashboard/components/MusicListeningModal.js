@@ -205,18 +205,16 @@ export default function MusicListeningModal({
             {/* Error State */}
             {status === 'error' && (
               <div className="text-center">
-                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-red-500 flex items-center justify-center">
-                  <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                <div className="text-6xl mx-auto mb-4">
+                  {error === "I don't know this song" ? '🤷' : '😕'}
                 </div>
 
                 <h3 className={`text-lg font-semibold mb-2 ${
                   isDarkMode ? 'text-white' : 'text-gray-900'
                 }`}>
-                  Detection Failed
+                  {error === "I don't know this song" ? 'Oh....' : 'Detection Failed'}
                 </h3>
-                <p className={`text-sm mb-4 ${
+                <p className={`text-sm mb-4 text-center ${
                   isDarkMode ? 'text-gray-400' : 'text-gray-600'
                 }`}>
                   {error}
