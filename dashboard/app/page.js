@@ -749,7 +749,7 @@ export default function Dashboard() {
 
       {/* Footer */}
       <footer className="mt-10 text-center text-[10px]" style={{ color: 'var(--text-tertiary)', opacity: 0.5 }}>
-        Enviro+ Monitor &middot; Raspberry Pi 4B &middot; PIM458 &middot; Supabase + Vercel
+        Prototype &middot; version 0.{process.env.NEXT_PUBLIC_BUILD_VERSION}
       </footer>
 
       {/* Settings Modal */}
