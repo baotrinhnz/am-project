@@ -161,8 +161,8 @@ export async function POST(request) {
       } else if (cmdStatus && cmdStatus.status === 'failed') {
         const errType = cmdStatus.result?.error;
         const msg = errType === 'no_fingerprint'
-          ? 'Không detect được, có thể quá ồn hoặc nhạc quá nhỏ'
-          : 'Ồ, tôi không biết bài hát này';
+          ? 'Could not detect music — too noisy or music is too quiet'
+          : "I don't know this song";
         return NextResponse.json({ success: false, error: msg });
       }
 
