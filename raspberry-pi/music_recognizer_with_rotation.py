@@ -13,8 +13,6 @@ Key design decisions:
 """
 
 import os
-import re
-import time
 import logging
 import logging.handlers
 import requests
@@ -57,11 +55,7 @@ load_dotenv(Path(__file__).parent / ".env")
 AUDD_API_TOKEN = os.getenv("AUDD_API_TOKEN")
 DEVICE_ID = os.getenv("DEVICE_ID", "rpi-enviro-01")
 
-# Keywords to identify MEMS mic in arecord -l output
-MEMS_KEYWORDS = ['iq', 'mems', 'sndrpii', 'dmic', 'ics43', 'enviro', 'i2s']
-
-MIC_LOCK      = Path('/tmp/mic_in_use.lock')
-PRIORITY_LOCK = Path('/tmp/music_detection_active.lock')  # tells bpm_monitor to yield
+ALSA_DEVICE = "plughw:adau7002"  # name-based — survives reboot card renumbering
 
 
 class MusicRecognizer:
@@ -72,75 +66,18 @@ class MusicRecognizer:
         if not self.api_token:
             raise ValueError("AUDD_API_TOKEN not provided or found in .env")
 
-        # Audio recording settings — 44100Hz S16_LE avoids I2S crackling at 48kHz
-        self.sample_rate = 44100
+        self.sample_rate = 48000
         self.channels = 2
-        self.format = "S16_LE"
+        self.format = "S32_LE"
         self.duration = 10         # seconds
 
-        # Find device by name at startup so reboot doesn't break card numbering
-        self.device = self._find_mems_device()
+        self.device = ALSA_DEVICE
 
         # File rotation settings
         self.save_dir = Path.home() / "Music_for_delete"
         self.save_dir.mkdir(exist_ok=True)
         self.max_recordings = 10
 
-    def _find_mems_device(self) -> str:
-        """Find MEMS microphone by device name, return plughw:X,Y string.
-
-        Uses device name instead of card number because card numbers can
-        change between reboots depending on which drivers load first.
-        """
-        try:
-            result = subprocess.run(['arecord', '-l'], capture_output=True, text=True)
-            if result.returncode != 0:
-                log.warning("arecord -l failed, falling back to plughw:2,0")
-                return "plughw:2,0"
-
-            log.info("Audio capture devices:\n" + result.stdout)
-
-            # Parse lines like:
-            # card 3: sndrpiiqdmic [sndrpiiqdmic], device 0: IQaudIO MEMS mic HiFi [...]
-            for line in result.stdout.splitlines():
-                line_lower = line.lower()
-                if 'card' not in line_lower:
-                    continue
-                # Skip HDMI outputs — they appear in capture list but aren't real mics
-                if 'hdmi' in line_lower:
-                    continue
-                if any(kw in line_lower for kw in MEMS_KEYWORDS):
-                    match = re.search(r'card\s+(\d+):.*device\s+(\d+):', line)
-                    if match:
-                        card, dev = match.group(1), match.group(2)
-                        device = f"plughw:{card},{dev}"
-                        log.info(f"Found MEMS mic by name: {device} — {line.strip()}")
-                        return device
-
-            # Fallback: use last non-HDMI capture card found
-            last_device = None
-            for line in result.stdout.splitlines():
-                if 'card' not in line.lower():
-                    continue
-                if 'hdmi' in line.lower():
-                    continue
-                match = re.search(r'card\s+(\d+):.*device\s+(\d+):', line)
-                if match:
-                    last_device = f"plughw:{match.group(1)},{match.group(2)}"
-
-            if last_device:
-                log.warning(f"MEMS mic not identified by keyword, using last capture device: {last_device}")
-                return last_device
-
-            log.warning("No suitable capture device found, falling back to plughw:2,0")
-            return "plughw:2,0"
-
-        except FileNotFoundError:
-            log.error("arecord not found, falling back to plughw:2,0")
-            return "plughw:2,0"
-        except Exception as e:
-            log.warning(f"Device detection error: {e}, falling back to plughw:2,0")
-            return "plughw:2,0"
 
     # ------------------------------------------------------------------
     # File rotation helpers
@@ -189,16 +126,6 @@ class MusicRecognizer:
         detection_log.info(f"--- Detection started ---")
         detection_log.info(f"Recording {self.duration}s | device={self.device} | file={output_file.name}")
 
-        # Claim priority — bpm_monitor will kill its arecord and release the mic
-        PRIORITY_LOCK.touch()
-
-        # Wait for bpm_monitor to release mic (up to 10s, usually < 1s after kill)
-        waited = 0
-        while MIC_LOCK.exists() and waited < 10:
-            time.sleep(0.3)
-            waited += 1
-
-        MIC_LOCK.touch()
         cmd = [
             'arecord',
             '-D', self.device,
@@ -213,8 +140,6 @@ class MusicRecognizer:
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True)
-            MIC_LOCK.unlink(missing_ok=True)
-            PRIORITY_LOCK.unlink(missing_ok=True)
 
             if result.returncode == 0:
                 size = output_file.stat().st_size if output_file.exists() else 0
@@ -241,8 +166,6 @@ class MusicRecognizer:
                 return None
 
         except FileNotFoundError:
-            MIC_LOCK.unlink(missing_ok=True)
-            PRIORITY_LOCK.unlink(missing_ok=True)
             log.error("arecord not found. Install with: sudo apt-get install alsa-utils")
             return None
         except Exception as e:

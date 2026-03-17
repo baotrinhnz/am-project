@@ -127,14 +127,10 @@ class MusicCommandListener:
                         # Save to music_detections table
                         detection_data = {
                             "device_id": self.device_id,
-                            "song_title": song.get('title', 'Unknown'),
-                            "artist": song.get('artist', 'Unknown'),
+                            "title": song.get('title'),
+                            "artist": song.get('artist'),
                             "album": song.get('album'),
                             "release_date": song.get('release_date'),
-                            "duration_ms": song.get('duration_ms'),
-                            "spotify_id": song.get('spotify', {}).get('id') if song.get('spotify') else None,
-                            "raw_response": result,
-                            "audio_file": str(audio_file),  # Save file path
                             "detected_at": datetime.now(timezone.utc).isoformat()
                         }
 
