@@ -121,7 +121,7 @@ export default function BpmWidget({ range, deviceId }) {
         ) : latest ? (
           <div className="flex items-baseline gap-2">
             <span className="text-4xl font-mono font-bold" style={{ color: '#fbbf24' }}>
-              {hoveredBpm ?? Math.round(latest.bpm)}
+              {hoveredBpm ?? latest.bpm.toFixed(1)}
             </span>
             <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>BPM</span>
           </div>
@@ -134,7 +134,11 @@ export default function BpmWidget({ range, deviceId }) {
       {data.length > 1 && (
         <ResponsiveContainer width="100%" height={80}>
           <AreaChart data={data} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}
-            onMouseMove={e => e.activePayload?.[0] && setHoveredBpm(Math.round(e.activePayload[0].value))}
+            onMouseMove={state => {
+              if (state?.isTooltipActive && state.activePayload?.[0]) {
+                setHoveredBpm(parseFloat(state.activePayload[0].value.toFixed(1)));
+              }
+            }}
             onMouseLeave={() => setHoveredBpm(null)}>
             <defs>
               <linearGradient id="bpmGrad" x1="0" y1="0" x2="0" y2="1">
@@ -151,7 +155,7 @@ export default function BpmWidget({ range, deviceId }) {
             <Tooltip
               contentStyle={{ background: 'var(--surface-1)', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: 11 }}
               labelFormatter={formatTime}
-              formatter={(v) => [`${Math.round(v)} BPM`, 'Ambient Beat']}
+              formatter={(v) => [`${parseFloat(v.toFixed(1))} BPM`, 'Ambient Beat']}
             />
             <Area type="monotone" dataKey="bpm" stroke="#fbbf24" strokeWidth={1.5}
               fill="url(#bpmGrad)" dot={false} activeDot={{ r: 4, fill: '#fbbf24', strokeWidth: 0 }} />
