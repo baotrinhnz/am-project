@@ -142,9 +142,9 @@ def record_audio(device: str, duration: int) -> Path | None:
 
 
 # ── BPM Detection ─────────────────────────────────────────────────────────────
-def detect_bpm(audio_file: Path) -> float | None:
+def detect_bpm(audio_file: Path) -> tuple[float, float] | tuple[None, None]:
     """Detect BPM from WAV file using aubio tempo detection.
-    Returns BPM float or None if no beat detected.
+    Returns (bpm, confidence) or (None, None) if no beat detected.
     """
     try:
         win_s  = 1024
@@ -163,17 +163,18 @@ def detect_bpm(audio_file: Path) -> float | None:
                 break
 
         if len(beats) < 2:
-            return None  # Not enough beats detected — silence or noise
+            return None, None  # Not enough beats
 
         bpm = tempo.get_bpm()
         if bpm < 40 or bpm > 220:
-            return None  # Out of realistic music range
+            return None, None  # Out of realistic music range
 
-        return round(float(bpm), 1)
+        confidence = float(tempo.get_confidence())
+        return round(float(bpm), 1), round(confidence, 3)
 
     except Exception as e:
         log.warning(f"BPM detection error: {e}")
-        return None
+        return None, None
 
 
 # ── Supabase ──────────────────────────────────────────────────────────────────
@@ -183,8 +184,24 @@ def get_supabase():
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
-def insert_bpm(supabase, bpm: float):
-    supabase.table("bpm_readings").insert({
+DEFAULT_CONFIDENCE_THRESHOLD = 0.4
+
+def fetch_confidence_threshold(supabase) -> float:
+    """Fetch bpm_confidence_threshold from device_settings. Falls back to default."""
+    try:
+        res = supabase.table("device_settings") \
+            .select("bpm_confidence_threshold") \
+            .eq("device_id", DEVICE_ID) \
+            .single() \
+            .execute()
+        val = res.data.get("bpm_confidence_threshold") if res.data else None
+        return float(val) if val is not None else DEFAULT_CONFIDENCE_THRESHOLD
+    except Exception:
+        return DEFAULT_CONFIDENCE_THRESHOLD
+
+
+def insert_bpm(supabase, bpm: float, table: str):
+    supabase.table(table).insert({
         "device_id":   DEVICE_ID,
         "bpm":         bpm,
         "recorded_at": datetime.now(timezone.utc).isoformat()
@@ -192,6 +209,8 @@ def insert_bpm(supabase, bpm: float):
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
+THRESHOLD_RELOAD_INTERVAL = 300  # reload threshold every 5 minutes
+
 def main():
     log.info(f"BPM Monitor starting | device={DEVICE_ID}")
 
@@ -199,20 +218,33 @@ def main():
     mic = find_mems_device()
     log.info(f"Using mic: {mic} | cycle: {RECORD_DURATION}s record + {SLEEP_INTERVAL}s sleep")
 
+    threshold = fetch_confidence_threshold(supabase)
+    log.info(f"Music confidence threshold: {threshold}")
+    last_threshold_reload = time.time()
+
     while True:
         try:
+            # Reload threshold every 5 minutes
+            if time.time() - last_threshold_reload > THRESHOLD_RELOAD_INTERVAL:
+                threshold = fetch_confidence_threshold(supabase)
+                last_threshold_reload = time.time()
+                log.info(f"Threshold reloaded: {threshold}")
+
             audio = record_audio(mic, RECORD_DURATION)
             if audio is None:
                 time.sleep(SLEEP_INTERVAL)
                 continue
 
-            bpm = detect_bpm(audio)
+            bpm, confidence = detect_bpm(audio)
 
-            if bpm:
-                insert_bpm(supabase, bpm)
-                log.info(f"BPM: {bpm}")
+            if bpm is None:
+                log.debug("No beat detected, skipping")
+            elif confidence >= threshold:
+                insert_bpm(supabase, bpm, "music_bpm_readings")
+                log.info(f"Music BPM: {bpm} (confidence={confidence})")
             else:
-                log.debug("No beat detected, skipping insert")
+                insert_bpm(supabase, bpm, "bpm_readings")
+                log.info(f"Ambient BPM: {bpm} (confidence={confidence})")
 
         except Exception as e:
             log.error(f"Cycle error: {e}")

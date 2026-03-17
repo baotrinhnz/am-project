@@ -16,6 +16,7 @@ export default function SettingsModal({ isOpen, onClose, devices, deviceSettings
           displayName: info.displayName === deviceId ? '' : info.displayName,
           location: info.location,
           note: info.note,
+          bpmConfidenceThreshold: info.bpmConfidenceThreshold ?? 0.4,
         };
       });
       setEditedSettings(initial);
@@ -124,6 +125,27 @@ export default function SettingsModal({ isOpen, onClose, devices, deviceSettings
                           rows={2}
                           className="w-full bg-surface-1 border border-white/10 rounded-md px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-teal-400/50 focus:ring-1 focus:ring-teal-400/20 resize-none"
                         />
+                      </div>
+
+                      {/* BPM Confidence Threshold */}
+                      <div>
+                        <label className="block text-xs text-white/50 mb-1.5">
+                          Music Beat Confidence Threshold
+                          <span className="ml-2 text-amber-400 font-mono">{(config.bpmConfidenceThreshold ?? 0.4).toFixed(2)}</span>
+                          <span className="text-white/30 ml-1">(0 = all beats, 1 = music only)</span>
+                        </label>
+                        <input
+                          type="range"
+                          min="0" max="1" step="0.05"
+                          value={config.bpmConfidenceThreshold ?? 0.4}
+                          onChange={(e) => updateDevice(deviceId, 'bpmConfidenceThreshold', parseFloat(e.target.value))}
+                          className="w-full accent-amber-400"
+                        />
+                        <div className="flex justify-between text-[10px] text-white/30 mt-1">
+                          <span>Ambient</span>
+                          <span>↑ threshold</span>
+                          <span>Music only</span>
+                        </div>
                       </div>
                     </div>
                   </div>

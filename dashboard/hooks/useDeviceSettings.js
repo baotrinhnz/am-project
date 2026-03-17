@@ -36,6 +36,7 @@ export function useDeviceSettings() {
       display_name: config.displayName || null,
       location: config.location || null,
       note: config.note || null,
+      bpm_confidence_threshold: config.bpmConfidenceThreshold ?? 0.4,
     };
 
     // Upsert (insert or update if exists)
@@ -66,6 +67,7 @@ export function useDeviceSettings() {
       displayName: setting?.display_name || deviceId,
       location: setting?.location || '',
       note: setting?.note || '',
+      bpmConfidenceThreshold: setting?.bpm_confidence_threshold ?? 0.4,
     };
   };
 
