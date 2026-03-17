@@ -1,13 +1,9 @@
 /** @type {import('next').NextConfig} */
-const { execSync } = require('child_process');
-const path = require('path');
 
-let buildVersion = '00';
-try {
-  // .git is in the repo root (parent of dashboard/)
-  const repoRoot = path.resolve(__dirname, '..');
-  buildVersion = execSync('git rev-list --count HEAD', { cwd: repoRoot }).toString().trim();
-} catch {}
+// Build date as version: YYMMDD.HHMM  e.g. 260317.1845
+const now = new Date();
+const pad = n => String(n).padStart(2, '0');
+const buildVersion = `${String(now.getUTCFullYear()).slice(2)}${pad(now.getUTCMonth()+1)}${pad(now.getUTCDate())}.${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}`;
 
 const nextConfig = {
   env: {
