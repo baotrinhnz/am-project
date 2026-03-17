@@ -17,6 +17,7 @@ export default function BpmWidget({ range, deviceId }) {
   const [latest, setLatest] = useState(null);
   const [loading, setLoading] = useState(true);
   const [localRange, setLocalRange] = useState(LOCAL_RANGES[0]);
+  const [hoveredBpm, setHoveredBpm] = useState(null);
 
   const effectiveMinutes = localRange.minutes ?? (
     range?.unit === 'days' ? range.value * 24 * 60 : (range?.value || 6) * 60
@@ -120,7 +121,7 @@ export default function BpmWidget({ range, deviceId }) {
         ) : latest ? (
           <div className="flex items-baseline gap-2">
             <span className="text-4xl font-mono font-bold" style={{ color: '#fbbf24' }}>
-              {Math.round(latest.bpm)}
+              {hoveredBpm ?? Math.round(latest.bpm)}
             </span>
             <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>BPM</span>
           </div>
@@ -132,7 +133,9 @@ export default function BpmWidget({ range, deviceId }) {
       {/* Chart */}
       {data.length > 1 && (
         <ResponsiveContainer width="100%" height={80}>
-          <AreaChart data={data} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}>
+          <AreaChart data={data} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}
+            onMouseMove={e => e.activePayload?.[0] && setHoveredBpm(Math.round(e.activePayload[0].value))}
+            onMouseLeave={() => setHoveredBpm(null)}>
             <defs>
               <linearGradient id="bpmGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.3} />
