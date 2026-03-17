@@ -60,7 +60,8 @@ DEVICE_ID = os.getenv("DEVICE_ID", "rpi-enviro-01")
 # Keywords to identify MEMS mic in arecord -l output
 MEMS_KEYWORDS = ['iq', 'mems', 'sndrpii', 'dmic', 'ics43', 'enviro', 'i2s']
 
-MIC_LOCK = Path('/tmp/mic_in_use.lock')   # shared with bpm_monitor
+MIC_LOCK      = Path('/tmp/mic_in_use.lock')
+PRIORITY_LOCK = Path('/tmp/music_detection_active.lock')  # tells bpm_monitor to yield
 
 
 class MusicRecognizer:
@@ -188,10 +189,13 @@ class MusicRecognizer:
         detection_log.info(f"--- Detection started ---")
         detection_log.info(f"Recording {self.duration}s | device={self.device} | file={output_file.name}")
 
-        # Wait for bpm_monitor to release mic (max 15s)
+        # Claim priority — bpm_monitor will kill its arecord and release the mic
+        PRIORITY_LOCK.touch()
+
+        # Wait for bpm_monitor to release mic (up to 10s, usually < 1s after kill)
         waited = 0
-        while MIC_LOCK.exists() and waited < 15:
-            time.sleep(1)
+        while MIC_LOCK.exists() and waited < 10:
+            time.sleep(0.3)
             waited += 1
 
         MIC_LOCK.touch()
@@ -210,6 +214,7 @@ class MusicRecognizer:
         try:
             result = subprocess.run(cmd, capture_output=True, text=True)
             MIC_LOCK.unlink(missing_ok=True)
+            PRIORITY_LOCK.unlink(missing_ok=True)
 
             if result.returncode == 0:
                 size = output_file.stat().st_size if output_file.exists() else 0
@@ -237,6 +242,7 @@ class MusicRecognizer:
 
         except FileNotFoundError:
             MIC_LOCK.unlink(missing_ok=True)
+            PRIORITY_LOCK.unlink(missing_ok=True)
             log.error("arecord not found. Install with: sudo apt-get install alsa-utils")
             return None
         except Exception as e:

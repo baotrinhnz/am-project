@@ -40,7 +40,8 @@ MAX_FILES       = 10     # rotate after 10 files
 
 MEMS_KEYWORDS = ['iq', 'mems', 'sndrpii', 'dmic', 'ics43', 'enviro', 'i2s', 'adau']
 
-MIC_LOCK = Path('/tmp/mic_in_use.lock')   # shared with music_recognizer
+MIC_LOCK      = Path('/tmp/mic_in_use.lock')       # held while recording
+PRIORITY_LOCK = Path('/tmp/music_detection_active.lock')  # music detection wants mic
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -110,41 +111,47 @@ def _next_file() -> Path:
 
 
 def record_audio(device: str, duration: int) -> Path | None:
-    """Record audio to Music_beating/ with rotation. Returns path or None on failure."""
-    # Wait for mic to be free (music_recognizer may be using it)
+    """Record audio with priority awareness. Yields immediately if music detection is active."""
+    # Don't start if music detection already has priority
+    if PRIORITY_LOCK.exists():
+        log.debug("Music detection active, skipping BPM cycle")
+        return None
+
+    # Wait for mic to be free (music_recognizer finishing up)
     waited = 0
-    while MIC_LOCK.exists() and waited < 20:
+    while MIC_LOCK.exists() and waited < 15:
         time.sleep(1)
         waited += 1
-    if MIC_LOCK.exists():
-        log.warning("Mic still busy after 20s wait, skipping cycle")
-        return None
 
     out = _next_file()
     MIC_LOCK.touch()
     try:
-        return _do_record(device, duration, out)
+        cmd = [
+            'arecord', '-D', device,
+            '-f', FORMAT, '-r', str(SAMPLE_RATE), '-c', str(CHANNELS),
+            '-d', str(duration), '-t', 'wav',
+            '--buffer-size=16384',
+            str(out)
+        ]
+        proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
+
+        # Poll: if music detection claims priority, kill arecord immediately
+        while proc.poll() is None:
+            if PRIORITY_LOCK.exists():
+                proc.terminate()
+                proc.wait(timeout=3)
+                log.info("Yielded mic to music detection")
+                out.unlink(missing_ok=True)
+                return None
+            time.sleep(0.3)
+
+        if proc.returncode != 0 or not out.exists() or out.stat().st_size == 0:
+            log.warning(f"Recording failed (rc={proc.returncode})")
+            out.unlink(missing_ok=True)
+            return None
+
     finally:
         MIC_LOCK.unlink(missing_ok=True)
-
-
-def _do_record(device: str, duration: int, out: Path) -> Path | None:
-    cmd = [
-        'arecord',
-        '-D', device,
-        '-f', FORMAT,
-        '-r', str(SAMPLE_RATE),
-        '-c', str(CHANNELS),
-        '-d', str(duration),
-        '-t', 'wav',
-        '--buffer-size=16384',  # larger buffer prevents dropouts on Pi
-        str(out)
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0 or not out.exists() or out.stat().st_size == 0:
-        log.warning(f"Recording failed: {result.stderr.strip()}")
-        out.unlink(missing_ok=True)
-        return None
 
     # Boost 15dB — MEMS mic is very quiet
     boosted = out.with_suffix('.boosted.wav')
