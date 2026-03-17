@@ -1,18 +1,32 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { format, parseISO } from 'date-fns';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+
+const LOCAL_RANGES = [
+  { label: '5m',  minutes: 5 },
+  { label: '30m', minutes: 30 },
+  { label: '1H',  minutes: 60 },
+  { label: '↑',   minutes: null },  // follow global
+];
 
 export default function BpmWidget({ range, deviceId }) {
   const [data, setData] = useState([]);
   const [latest, setLatest] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [localRange, setLocalRange] = useState(LOCAL_RANGES[0]);
+
+  const effectiveMinutes = localRange.minutes ?? (
+    range?.unit === 'days' ? range.value * 24 * 60 : (range?.value || 6) * 60
+  );
+
+  const effectiveMinutesRef = useRef(effectiveMinutes);
+  useEffect(() => { effectiveMinutesRef.current = effectiveMinutes; }, [effectiveMinutes]);
 
   const fetchData = async () => {
-    const hours = range?.unit === 'days' ? range.value * 24 : (range?.value || 6);
-    const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+    const since = new Date(Date.now() - effectiveMinutes * 60 * 1000).toISOString();
 
     let query = supabase
       .from('bpm_readings')
@@ -29,6 +43,8 @@ export default function BpmWidget({ range, deviceId }) {
     if (rows?.length) {
       setData(rows);
       setLatest(rows[rows.length - 1]);
+    } else {
+      setData([]);
     }
     setLoading(false);
   };
@@ -39,31 +55,54 @@ export default function BpmWidget({ range, deviceId }) {
     const sub = supabase
       .channel('bpm_readings_channel')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bpm_readings' }, payload => {
+        const mins = effectiveMinutesRef.current;
+        const cutoff = new Date(Date.now() - mins * 60 * 1000).toISOString();
         setLatest(payload.new);
-        setData(prev => [...prev.slice(-499), payload.new]);
+        setData(prev => [...prev, payload.new].filter(r => r.recorded_at >= cutoff).slice(-500));
       })
       .subscribe();
 
     return () => supabase.removeChannel(sub);
-  }, [range, deviceId]);
+  }, [range, deviceId, localRange]);
 
   const formatTime = (ts) => {
     try {
-      const hours = range?.unit === 'days' ? range.value * 24 : (range?.value || 6);
-      return format(parseISO(ts), hours <= 24 ? 'HH:mm' : 'MMM dd HH:mm');
+      if (effectiveMinutes <= 60) return format(parseISO(ts), 'HH:mm:ss');
+      if (effectiveMinutes <= 1440) return format(parseISO(ts), 'HH:mm');
+      return format(parseISO(ts), 'MMM dd HH:mm');
     } catch { return ''; }
   };
 
   return (
     <div className="card-glow p-5">
-      <div className="flex items-center justify-between mb-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
           <span>🥁</span> Beat Rate
         </h2>
-        <span className="text-xs px-2 py-0.5 rounded-full"
-          style={{ background: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)' }}>
-          live
-        </span>
+        <div className="flex items-center gap-2">
+          {/* Local range pills */}
+          <div className="flex gap-0.5">
+            {LOCAL_RANGES.map(r => (
+              <button
+                key={r.label}
+                onClick={() => setLocalRange(r)}
+                className="px-1.5 py-0.5 rounded text-[10px] font-medium transition-all"
+                style={localRange.label === r.label
+                  ? { background: 'rgba(251,191,36,0.2)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.35)' }
+                  : { background: 'transparent', color: 'var(--text-tertiary)', border: '1px solid transparent' }
+                }
+                title={r.minutes === null ? 'Follow global range' : `Last ${r.label}`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+          <span className="text-[10px] px-2 py-0.5 rounded-full"
+            style={{ background: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)' }}>
+            live
+          </span>
+        </div>
       </div>
 
       {/* Current BPM */}
