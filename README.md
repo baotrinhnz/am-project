@@ -19,17 +19,19 @@ A Raspberry Pi–based ambient environment monitor with live music detection. Se
 ```
 Raspberry Pi
 ├── sensor_reader.py          → reads Enviro+ every 60s → Supabase sensor_readings
+├── bpm_monitor.py            → records 5s every 15s → detects BPM → Supabase bpm_readings
 └── music_manual_trigger_rotation.py
         ↕ polls device_commands (Supabase)
         └── music_recognizer_with_rotation.py
+                → sets PRIORITY_LOCK (bpm yields mic)
                 → arecord 10s (48kHz S32_LE, plughw:adau7002)
                 → AudD API fingerprint
                 → Supabase music_detections
 
 Dashboard (Vercel / Next.js)
-├── Reads sensor_readings, music_detections in real-time
+├── Reads sensor_readings, music_detections, bpm_readings in real-time
 ├── Detect Music button → inserts device_commands → Pi picks up
-└── Displays: temperature, humidity, pressure, light, noise, music
+└── Displays: temperature, humidity, pressure, light, noise, BPM, music
 ```
 
 ---
@@ -40,14 +42,17 @@ Dashboard (Vercel / Next.js)
 |---------|--------|---------|
 | `enviro-monitor.service` | `sensor_reader.py` | Continuously reads Enviro+ sensors |
 | `music-recognition.service` | `music_manual_trigger_rotation.py` | Polls Supabase for detect commands |
+| `bpm-monitor.service` | `bpm_monitor.py` | Records 5s audio every 15s, detects ambient BPM  |
 
 ```bash
 # Status
 sudo systemctl status enviro-monitor
 sudo systemctl status music-recognition
+sudo systemctl status bpm-monitor
 
 # Restart
 sudo systemctl restart music-recognition
+sudo systemctl restart bpm-monitor
 ```
 
 ---
@@ -60,6 +65,11 @@ sudo systemctl restart music-recognition
 
 **PipeWire note:** PipeWire auto-starts as a user service. It does not block `plughw:` direct ALSA access at 48kHz.
 
+**Mic coordination:** `bpm_monitor` and `music_recognizer` share the mic using two lock files:
+
+- `PRIORITY_LOCK` (`/tmp/music_detection_active.lock`) — set by music_recognizer; bpm skips its cycle if this exists
+- `MIC_LOCK` (`/tmp/mic_in_use.lock`) — set by bpm while recording; music_recognizer waits up to 6s for it to clear
+
 ---
 
 ## Supabase Tables
@@ -68,6 +78,7 @@ sudo systemctl restart music-recognition
 |-------|--------|--------|
 | `sensor_readings` | sensor_reader.py | Dashboard |
 | `music_detections` | music_manual_trigger_rotation.py | Dashboard |
+| `bpm_readings` | bpm_monitor.py | Dashboard |
 | `device_commands` | Dashboard API | music_manual_trigger_rotation.py |
 | `device_settings` | Manual / Dashboard | Pi services |
 

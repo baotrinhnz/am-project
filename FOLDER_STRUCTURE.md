@@ -5,6 +5,7 @@ c:\AM\
 │
 ├── raspberry-pi/
 │   ├── sensor_reader.py                     # Enviro+ sensor monitor (always-on service)
+│   ├── bpm_monitor.py                       # Ambient BPM detection (always-on service)
 │   ├── music_recognizer_with_rotation.py    # Audio recording + AudD fingerprinting
 │   ├── music_manual_trigger_rotation.py     # Supabase command listener (always-on service)
 │   ├── .env                                 # Pi environment variables
