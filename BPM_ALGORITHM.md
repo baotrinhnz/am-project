@@ -27,6 +27,19 @@ Mỗi 15 giây, Pi ghi 5 giây âm thanh rồi tính BPM một lần.
 
 ### 2. Phân tích beat — thư viện aubio
 
+**aubio là gì:**
+aubio là thư viện mã nguồn mở chuyên về phân tích âm nhạc, được phát triển từ năm 2003 bởi Paul Brossier trong luận án tiến sĩ tại Queen Mary University of London. Nó được dùng rộng rãi trong nghiên cứu âm nhạc, phần mềm DJ, và các ứng dụng xử lý âm thanh thời gian thực. aubio không phải tự viết thuật toán — nó triển khai các **thuật toán đã được chuẩn hoá trong ngành** (xem bên dưới).
+
+**Cách tính này có chuẩn không:**
+Có. aubio dùng phương pháp **onset detection + autocorrelation** — đây là hai kỹ thuật học thuật đã được công bố và kiểm chứng trong cộng đồng nghiên cứu Music Information Retrieval (MIR). Không phải tự nghĩ ra. Cụ thể:
+
+- **Onset detection**: phát hiện điểm âm thanh bắt đầu dựa trên sự thay đổi năng lượng theo tần số — được mô tả lần đầu trong các bài báo của Brossier, Dixon, và Scheirer từ những năm 2000
+- **Autocorrelation để tìm tempo**: so sánh tín hiệu với chính nó ở các độ trễ khác nhau để tìm chu kỳ lặp lại — là kỹ thuật cơ bản trong xử lý tín hiệu số (DSP)
+
+Nói ngắn gọn: **đây là chuẩn ngành, không phải heuristic tự viết**.
+
+---
+
 aubio không "nghe" cả file rồi mới tính — nó xử lý âm thanh **từng mảnh nhỏ liên tiếp**, giống như tai người nghe nhạc theo thời gian thực.
 
 **Chia nhỏ âm thanh:**
