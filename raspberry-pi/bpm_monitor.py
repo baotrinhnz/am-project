@@ -119,6 +119,7 @@ def record_audio(device: str, duration: int) -> Path | None:
         '-c', str(CHANNELS),
         '-d', str(duration),
         '-t', 'wav',
+        '--buffer-size=16384',  # larger buffer prevents dropouts on Pi
         str(out)
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -152,24 +153,28 @@ def detect_bpm(audio_file: Path) -> tuple[float, float] | tuple[None, None]:
 
         source  = aubio.source(str(audio_file), SAMPLE_RATE, hop_s)
         tempo   = aubio.tempo("default", win_s, hop_s, SAMPLE_RATE)
-        beats   = []
+        beats = []
 
         while True:
             samples, read = source()
-            is_beat = tempo(samples)
-            if is_beat:
+            if tempo(samples)[0]:
                 beats.append(tempo.get_last_s())
             if read < hop_s:
                 break
 
-        if len(beats) < 2:
+        if len(beats) < 3:
             return None, None  # Not enough beats
 
         bpm = tempo.get_bpm()
         if bpm < 40 or bpm > 220:
             return None, None  # Out of realistic music range
 
-        confidence = float(tempo.get_confidence())
+        # Beat regularity as confidence: regular intervals = music, irregular = noise
+        intervals = [beats[i+1] - beats[i] for i in range(len(beats) - 1)]
+        mean_i = sum(intervals) / len(intervals)
+        std_i  = (sum((x - mean_i) ** 2 for x in intervals) / len(intervals)) ** 0.5
+        cv     = std_i / mean_i if mean_i > 0 else 1.0
+        confidence = max(0.0, min(1.0, 1.0 - cv * 3))
         return round(float(bpm), 1), round(confidence, 3)
 
     except Exception as e:

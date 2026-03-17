@@ -193,6 +193,7 @@ class MusicRecognizer:
             '-c', str(self.channels),
             '-d', str(self.duration),
             '-t', 'wav',
+            '--buffer-size=16384',  # larger buffer prevents dropouts on Pi
             str(output_file)
         ]
 
