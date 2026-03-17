@@ -732,15 +732,17 @@ export default function Dashboard() {
             range={range}
           />
         ))}
-        {/* BPM Widget */}
-        <BpmWidget range={range} deviceId={selectedDevice} />
-
         {/* System Info Panel */}
         <SystemInfoPanel
           data={data}
           range={range}
           devices={devices}
         />
+      </div>
+
+      {/* Music Beat — full width */}
+      <div className="mt-4">
+        <BpmWidget range={range} deviceId={selectedDevice} />
       </div>
 
       {/* Footer */}

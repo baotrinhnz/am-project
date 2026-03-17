@@ -78,7 +78,7 @@ export default function BpmWidget({ range, deviceId }) {
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-          <span>🥁</span> Beat Rate
+          <span>🥁</span> Music Beat
         </h2>
         <div className="flex items-center gap-2">
           {/* Local range pills */}
@@ -131,9 +131,12 @@ export default function BpmWidget({ range, deviceId }) {
                 <stop offset="95%" stopColor="#fbbf24" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <XAxis dataKey="recorded_at" tickFormatter={formatTime} tick={{ fontSize: 9 }}
+            <XAxis dataKey="recorded_at" tickFormatter={formatTime}
+              tick={{ fontSize: 9, fill: 'var(--text-tertiary)' }}
               stroke="var(--border-color)" tickLine={false} />
-            <YAxis domain={['auto', 'auto']} tick={{ fontSize: 9 }} stroke="var(--border-color)" tickLine={false} />
+            <YAxis domain={['auto', 'auto']}
+              tick={{ fontSize: 9, fill: 'var(--text-tertiary)' }}
+              stroke="var(--border-color)" tickLine={false} />
             <Tooltip
               contentStyle={{ background: 'var(--surface-1)', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: 11 }}
               labelFormatter={formatTime}
