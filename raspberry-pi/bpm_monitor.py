@@ -31,9 +31,9 @@ DEVICE_ID     = os.getenv("DEVICE_ID", "rpi-enviro-01")
 
 RECORD_DURATION = 8      # seconds per sample
 SLEEP_INTERVAL  = 10     # seconds between samples
-SAMPLE_RATE     = 48000  # MEMS mic native rate
-CHANNELS        = 2      # Stereo — required by ADAU7002 hardware
-FORMAT          = "S32_LE"  # 32-bit — ADAU7002 native format
+SAMPLE_RATE     = 44100  # 44100Hz S16_LE avoids I2S crackling at 48kHz on Pi
+CHANNELS        = 2
+FORMAT          = "S16_LE"
 
 SAVE_DIR        = Path.home() / "Music_beating"
 MAX_FILES       = 10     # rotate after 10 files

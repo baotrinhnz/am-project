@@ -72,10 +72,10 @@ class MusicRecognizer:
         if not self.api_token:
             raise ValueError("AUDD_API_TOKEN not provided or found in .env")
 
-        # Audio recording settings — ADAU7002 requires S32_LE stereo
-        self.sample_rate = 48000   # MEMS mic native rate
-        self.channels = 2          # Stereo — required by ADAU7002 hardware
-        self.format = "S32_LE"     # 32-bit — ADAU7002 native format
+        # Audio recording settings — 44100Hz S16_LE avoids I2S crackling at 48kHz
+        self.sample_rate = 44100
+        self.channels = 2
+        self.format = "S16_LE"
         self.duration = 10         # seconds
 
         # Find device by name at startup so reboot doesn't break card numbering
