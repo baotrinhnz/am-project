@@ -73,48 +73,18 @@ export default function BpmWidget({ range, deviceId }) {
     } catch { return ''; }
   };
 
-  const BPM_TABLE = [
-    { bpm: '60–80',   feel: 'Slow, relaxing',        genre: 'Ballad, Ambient, Lo-fi' },
-    { bpm: '80–100',  feel: 'Moderate, easy',         genre: 'R&B, Soul, Hip-hop' },
-    { bpm: '100–120', feel: 'Energetic, fun',          genre: 'Pop, Indie Pop' },
-    { bpm: '~120',    feel: 'Perfect balance',         genre: 'House, Dance Pop' },
-    { bpm: '128–140', feel: 'Pumping, intense',        genre: 'EDM, Techno, Trance' },
-    { bpm: '140–180+',feel: 'Extremely fast',          genre: 'Drum & Bass, Hardcore' },
-  ];
-
   return (
     <div className="card-glow p-5">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-          <span>🥁</span> Ambient Beat Rate
-          <span className="text-xs font-normal" style={{ color: 'var(--text-tertiary)' }}>(BPM)</span>
-          {/* Info icon with hover tooltip */}
-          <div className="relative group">
-            <button className="w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold leading-none transition-colors"
-              style={{ background: 'var(--surface-2)', border: '1px solid var(--border-color)', color: 'var(--text-tertiary)' }}>
-              i
-            </button>
-            <div className="absolute left-0 top-6 z-50 hidden group-hover:block w-72 rounded-lg shadow-xl text-xs"
-              style={{ background: 'var(--surface-1)', border: '1px solid var(--border-color)' }}>
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                    <th className="px-3 py-2 text-left font-semibold" style={{ color: 'var(--text-secondary)' }}>BPM</th>
-                    <th className="px-3 py-2 text-left font-semibold" style={{ color: 'var(--text-secondary)' }}>Feel</th>
-                    <th className="px-3 py-2 text-left font-semibold" style={{ color: 'var(--text-secondary)' }}>Genre</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {BPM_TABLE.map((row, i) => (
-                    <tr key={i} style={{ borderBottom: i < BPM_TABLE.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
-                      <td className="px-3 py-1.5 font-mono font-medium" style={{ color: '#fbbf24' }}>{row.bpm}</td>
-                      <td className="px-3 py-1.5" style={{ color: 'var(--text-secondary)' }}>{row.feel}</td>
-                      <td className="px-3 py-1.5" style={{ color: 'var(--text-tertiary)' }}>{row.genre}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div className="relative group cursor-default">
+            <span className="flex items-center gap-2">
+              <span>🥁</span> Ambient Beat Rate
+            </span>
+            <div className="absolute left-0 top-6 z-50 hidden group-hover:block w-80 rounded-lg shadow-xl p-3 text-xs leading-relaxed"
+              style={{ background: 'var(--surface-1)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+              Ambient beat rate is the perceived rhythmic pulse of an environment, derived from all naturally occurring sounds in a space — crowd noise, footsteps, clinking glasses, laughter — rather than from music itself. It reflects how "alive" or energetic a venue feels at any given moment. A high ambient beat rate signals a busy, lively atmosphere; a low one indicates a calm, quiet space.
             </div>
           </div>
         </h2>
@@ -181,7 +151,7 @@ export default function BpmWidget({ range, deviceId }) {
               formatter={(v) => [`${Math.round(v)} BPM`, 'Ambient Beat']}
             />
             <Area type="monotone" dataKey="bpm" stroke="#fbbf24" strokeWidth={1.5}
-              fill="url(#bpmGrad)" dot={false} />
+              fill="url(#bpmGrad)" dot={false} activeDot={{ r: 4, fill: '#fbbf24', strokeWidth: 0 }} />
           </AreaChart>
         </ResponsiveContainer>
       )}
