@@ -40,6 +40,8 @@ MAX_FILES       = 10     # rotate after 10 files
 
 MEMS_KEYWORDS = ['iq', 'mems', 'sndrpii', 'dmic', 'ics43', 'enviro', 'i2s', 'adau']
 
+MIC_LOCK = Path('/tmp/mic_in_use.lock')   # shared with music_recognizer
+
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -109,8 +111,24 @@ def _next_file() -> Path:
 
 def record_audio(device: str, duration: int) -> Path | None:
     """Record audio to Music_beating/ with rotation. Returns path or None on failure."""
-    out = _next_file()
+    # Wait for mic to be free (music_recognizer may be using it)
+    waited = 0
+    while MIC_LOCK.exists() and waited < 20:
+        time.sleep(1)
+        waited += 1
+    if MIC_LOCK.exists():
+        log.warning("Mic still busy after 20s wait, skipping cycle")
+        return None
 
+    out = _next_file()
+    MIC_LOCK.touch()
+    try:
+        return _do_record(device, duration, out)
+    finally:
+        MIC_LOCK.unlink(missing_ok=True)
+
+
+def _do_record(device: str, duration: int, out: Path) -> Path | None:
     cmd = [
         'arecord',
         '-D', device,

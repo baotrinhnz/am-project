@@ -14,6 +14,7 @@ Key design decisions:
 
 import os
 import re
+import time
 import logging
 import logging.handlers
 import requests
@@ -58,6 +59,8 @@ DEVICE_ID = os.getenv("DEVICE_ID", "rpi-enviro-01")
 
 # Keywords to identify MEMS mic in arecord -l output
 MEMS_KEYWORDS = ['iq', 'mems', 'sndrpii', 'dmic', 'ics43', 'enviro', 'i2s']
+
+MIC_LOCK = Path('/tmp/mic_in_use.lock')   # shared with bpm_monitor
 
 
 class MusicRecognizer:
@@ -185,6 +188,13 @@ class MusicRecognizer:
         detection_log.info(f"--- Detection started ---")
         detection_log.info(f"Recording {self.duration}s | device={self.device} | file={output_file.name}")
 
+        # Wait for bpm_monitor to release mic (max 15s)
+        waited = 0
+        while MIC_LOCK.exists() and waited < 15:
+            time.sleep(1)
+            waited += 1
+
+        MIC_LOCK.touch()
         cmd = [
             'arecord',
             '-D', self.device,
@@ -199,6 +209,7 @@ class MusicRecognizer:
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True)
+            MIC_LOCK.unlink(missing_ok=True)
 
             if result.returncode == 0:
                 size = output_file.stat().st_size if output_file.exists() else 0
@@ -225,6 +236,7 @@ class MusicRecognizer:
                 return None
 
         except FileNotFoundError:
+            MIC_LOCK.unlink(missing_ok=True)
             log.error("arecord not found. Install with: sudo apt-get install alsa-utils")
             return None
         except Exception as e:
