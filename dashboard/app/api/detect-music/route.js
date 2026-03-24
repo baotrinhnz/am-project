@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+export const maxDuration = 60; // Vercel: allow up to 60s for recording + AudD
+
 // Initialize Supabase client with service role key for server-side operations
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -128,9 +130,9 @@ export async function POST(request) {
       });
     }
 
-    // Poll for result (wait up to 30 seconds for 20s recording + processing)
+    // Poll for result (wait up to 55 seconds: 10s record + sox + AudD ~15s + buffer)
     let attempts = 0;
-    const maxAttempts = 30;
+    const maxAttempts = 55;
     let detectedSong = null;
 
     while (attempts < maxAttempts && !detectedSong) {

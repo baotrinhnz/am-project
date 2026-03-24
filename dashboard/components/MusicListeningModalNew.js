@@ -40,10 +40,10 @@ export default function MusicListeningModal({ isOpen, onClose, onDetected, devic
     setDetectedSong(null);
     setError(null);
 
-    // After 10s (recording duration), switch to "thinking"
+    // After 12s (recording 10s + buffer), switch to "thinking"
     thinkingTimerRef.current = setTimeout(() => {
       setStatus(prev => prev === 'listening' ? 'thinking' : prev);
-    }, 10000);
+    }, 12000);
 
     try {
       const res = await fetch('/api/detect-music', {
