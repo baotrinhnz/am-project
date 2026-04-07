@@ -34,7 +34,7 @@ SAMPLE_RATE     = 48000  # 48kHz native rate of adau7002 I2S mic
 CHANNELS        = 2
 FORMAT          = "S32_LE"
 
-SAVE_DIR        = Path.home() / "Music_beating"
+SAVE_DIR        = Path.home() / "Ambient_beats"
 MAX_FILES       = 10     # rotate after 10 files
 
 ALSA_DEVICE   = "plughw:adau7002"  # name-based — survives reboot card renumbering

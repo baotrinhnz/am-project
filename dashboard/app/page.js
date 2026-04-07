@@ -8,6 +8,7 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 import { useDeviceSettings } from '../hooks/useDeviceSettings';
+import { pivotDataForMultiDevice, getDeviceColorMap } from '../lib/multiDeviceData';
 import SettingsModal from '../components/SettingsModal';
 import MusicDetections from '../components/MusicDetections';
 import SimpleServiceStatus from '../components/SimpleServiceStatus';
@@ -140,8 +141,10 @@ function StatCard({ label, value, unit, color, icon }) {
 }
 
 // ─── Individual Sensor Chart ────────────────────────────────────────────────
-function SingleSensorChart({ sensor, data, range }) {
-  const hasData = data.length > 0 && data.some(d => d[sensor.key] != null);
+function SingleSensorChart({ sensor, data, range, isMultiDevice, devices, deviceColorMap, deviceSettings }) {
+  const hasData = isMultiDevice
+    ? data.length > 0 && data.some(d => devices?.some(id => d[`${sensor.key}_${id}`] != null))
+    : data.length > 0 && data.some(d => d[sensor.key] != null);
 
   return (
     <div className="card-glow p-4">
@@ -154,10 +157,19 @@ function SingleSensorChart({ sensor, data, range }) {
         <ResponsiveContainer width="100%" height={120}>
           <AreaChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
             <defs>
-              <linearGradient id={`grad-single-${sensor.key}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={sensor.color} stopOpacity={0.3} />
-                <stop offset="100%" stopColor={sensor.color} stopOpacity={0} />
-              </linearGradient>
+              {isMultiDevice ? (
+                devices.map(id => (
+                  <linearGradient key={id} id={`grad-${sensor.key}-${id}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={deviceColorMap[id]} stopOpacity={0.15} />
+                    <stop offset="100%" stopColor={deviceColorMap[id]} stopOpacity={0} />
+                  </linearGradient>
+                ))
+              ) : (
+                <linearGradient id={`grad-single-${sensor.key}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={sensor.color} stopOpacity={0.3} />
+                  <stop offset="100%" stopColor={sensor.color} stopOpacity={0} />
+                </linearGradient>
+              )}
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
             <XAxis
@@ -176,25 +188,57 @@ function SingleSensorChart({ sensor, data, range }) {
                 if (!active || !payload?.length) return null;
                 return (
                   <div className="rounded-lg px-2.5 py-1.5 shadow-xl text-xs" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-color)' }}>
-                    <p className="text-[10px] mb-0.5" style={{ color: 'var(--text-tertiary)' }}>{payload[0].payload.time}</p>
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: sensor.color }} />
-                      <span className="font-mono font-medium" style={{ color: 'var(--text-primary)' }}>{payload[0].value}</span>
-                      <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>{sensor.unit}</span>
-                    </div>
+                    <p className="text-[10px] mb-0.5" style={{ color: 'var(--text-tertiary)' }}>{payload[0]?.payload?.time}</p>
+                    {payload.filter(p => p.value != null).map((p, i) => (
+                      <div key={i} className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.color || p.stroke }} />
+                        <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>{p.name}</span>
+                        <span className="font-mono font-medium" style={{ color: 'var(--text-primary)' }}>{p.value}</span>
+                        <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>{sensor.unit}</span>
+                      </div>
+                    ))}
                   </div>
                 );
               }}
             />
-            <Area
-              type="monotone"
-              dataKey={sensor.key}
-              stroke={sensor.color}
-              strokeWidth={2}
-              fill={`url(#grad-single-${sensor.key})`}
-              dot={false}
-              connectNulls
-            />
+            {isMultiDevice ? (
+              <>
+                {devices.map(id => (
+                  <Area
+                    key={id}
+                    type="monotone"
+                    dataKey={`${sensor.key}_${id}`}
+                    name={deviceSettings?.getDeviceInfo(id).displayName || id}
+                    stroke={deviceColorMap[id]}
+                    strokeWidth={1.5}
+                    fill={`url(#grad-${sensor.key}-${id})`}
+                    dot={false}
+                    connectNulls
+                  />
+                ))}
+                <Area
+                  type="monotone"
+                  dataKey={`${sensor.key}_avg`}
+                  name="Average"
+                  stroke="rgba(255,255,255,0.5)"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                  fill="none"
+                  dot={false}
+                  connectNulls
+                />
+              </>
+            ) : (
+              <Area
+                type="monotone"
+                dataKey={sensor.key}
+                stroke={sensor.color}
+                strokeWidth={2}
+                fill={`url(#grad-single-${sensor.key})`}
+                dot={false}
+                connectNulls
+              />
+            )}
           </AreaChart>
         </ResponsiveContainer>
       ) : (
@@ -202,13 +246,30 @@ function SingleSensorChart({ sensor, data, range }) {
           No data
         </div>
       )}
+      {/* Device legend for multi-device */}
+      {isMultiDevice && hasData && (
+        <div className="flex flex-wrap gap-2 mt-2">
+          {devices.map(id => (
+            <div key={id} className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full" style={{ background: deviceColorMap[id] }} />
+              <span className="text-[9px]" style={{ color: 'var(--text-tertiary)' }}>{deviceSettings?.getDeviceInfo(id).displayName || id}</span>
+            </div>
+          ))}
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-0.5" style={{ background: 'rgba(255,255,255,0.5)', borderTop: '1px dashed rgba(255,255,255,0.5)' }} />
+            <span className="text-[9px]" style={{ color: 'var(--text-tertiary)' }}>Avg</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── Chart Panel ────────────────────────────────────────────────────────────
-function ChartPanel({ title, icon, sensors, data, range }) {
-  const hasData = data.length > 0 && sensors.some(s => data.some(d => d[s.key] != null));
+function ChartPanel({ title, icon, sensors, data, range, isMultiDevice }) {
+  const hasData = isMultiDevice
+    ? data.length > 0 && sensors.some(s => data.some(d => d[`${s.key}_avg`] != null))
+    : data.length > 0 && sensors.some(s => data.some(d => d[s.key] != null));
 
   return (
     <div className="card-glow p-5">
@@ -249,10 +310,11 @@ function ChartPanel({ title, icon, sensors, data, range }) {
               <Area
                 key={s.key}
                 type="monotone"
-                dataKey={s.key}
-                name={`${s.label} (${s.unit})`}
+                dataKey={isMultiDevice ? `${s.key}_avg` : s.key}
+                name={isMultiDevice ? `${s.label} avg (${s.unit})` : `${s.label} (${s.unit})`}
                 stroke={s.color}
                 strokeWidth={1.5}
+                strokeDasharray={isMultiDevice ? '4 3' : undefined}
                 fill={`url(#grad-${s.key})`}
                 dot={false}
                 connectNulls
@@ -385,6 +447,8 @@ export default function Dashboard() {
   const [lastUpdate, setLastUpdate] = useState(null);
   const [selectedDevice, setSelectedDevice] = useState('all');
   const [devices, setDevices] = useState([]);
+  const [isMultiDevice, setIsMultiDevice] = useState(false);
+  const [deviceColorMap, setDeviceColorMap] = useState({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [musicSectionOpen, setMusicSectionOpen] = useState(false);
   const [theme, setTheme] = useState('dark');
@@ -448,19 +512,29 @@ export default function Dashboard() {
       return;
     }
 
-    // Downsample if too many points (keep ~200 max for smooth charts)
-    let processed = rows || [];
-    if (processed.length > 200) {
-      const step = Math.ceil(processed.length / 200);
-      processed = processed.filter((_, i) => i % step === 0);
+    if (selectedDevice === 'all' && rows?.length > 0) {
+      // Multi-device: pivot data into per-device columns + averages
+      const sensorKeys = INDIVIDUAL_SENSORS.map(s => s.key);
+      const pivoted = pivotDataForMultiDevice(rows, sensorKeys, range, formatTime);
+      const activeDevices = [...new Set(rows.map(r => r.device_id))].filter(Boolean);
+      setData(pivoted);
+      setDeviceColorMap(getDeviceColorMap(activeDevices));
+      setIsMultiDevice(true);
+    } else {
+      // Single device: downsample and map as before
+      let processed = rows || [];
+      if (processed.length > 200) {
+        const step = Math.ceil(processed.length / 200);
+        processed = processed.filter((_, i) => i % step === 0);
+      }
+      const chartData = processed.map(r => ({
+        ...r,
+        time: formatTime(r.recorded_at, range),
+      }));
+      setData(chartData);
+      setIsMultiDevice(false);
     }
 
-    const chartData = processed.map(r => ({
-      ...r,
-      time: formatTime(r.recorded_at, range),
-    }));
-
-    setData(chartData);
     if (rows?.length > 0) {
       setLatest(rows[rows.length - 1]);
       setLastUpdate(new Date());
@@ -496,13 +570,15 @@ export default function Dashboard() {
           if (selectedDevice === 'all' || payload.new.device_id === selectedDevice) {
             setLatest(payload.new);
             setLastUpdate(new Date());
-            // Add to chart data
-            setData(prev => {
-              const newPoint = { ...payload.new, time: formatTime(payload.new.recorded_at, range) };
-              const updated = [...prev, newPoint];
-              // Keep max 200 points
-              return updated.length > 200 ? updated.slice(-200) : updated;
-            });
+            if (selectedDevice !== 'all') {
+              // Single device: append point directly
+              setData(prev => {
+                const newPoint = { ...payload.new, time: formatTime(payload.new.recorded_at, range) };
+                const updated = [...prev, newPoint];
+                return updated.length > 200 ? updated.slice(-200) : updated;
+              });
+            }
+            // Multi-device: skip append, rely on 60s auto-refresh for chart update
           }
           // Always refresh device list when new device appears
           fetchDevices();
@@ -694,11 +770,27 @@ export default function Dashboard() {
         </div>
         */}
 
-        <StatCard label="Temperature" value={latest?.temperature?.toFixed(1)} unit="°C" color="#fb7185" icon="🌡️" />
-        <StatCard label="Humidity" value={latest?.humidity?.toFixed(1)} unit="%" color="#60a5fa" icon="💧" />
-        <StatCard label="Pressure" value={latest?.pressure?.toFixed(0)} unit="hPa" color="#a78bfa" icon="🔵" />
-        <StatCard label="Light" value={latest?.lux?.toFixed(0)} unit="lux" color="#fbbf24" icon="☀️" />
-        <StatCard label="Noise" value={latest?.noise_level?.toFixed(3)} unit="" color="#f472b6" icon="🔊" />
+        {(() => {
+          if (isMultiDevice && data.length > 0) {
+            // Average of the latest bucket across all devices
+            const last = data[data.length - 1];
+            const lbl = (s) => `${s} (avg)`;
+            return (<>
+              <StatCard label={lbl("Temperature")} value={last?.temperature_avg?.toFixed(1)} unit="°C" color="#fb7185" icon="🌡️" />
+              <StatCard label={lbl("Humidity")} value={last?.humidity_avg?.toFixed(1)} unit="%" color="#60a5fa" icon="💧" />
+              <StatCard label={lbl("Pressure")} value={last?.pressure_avg?.toFixed(0)} unit="hPa" color="#a78bfa" icon="🔵" />
+              <StatCard label={lbl("Light")} value={last?.lux_avg?.toFixed(0)} unit="lux" color="#fbbf24" icon="☀️" />
+              <StatCard label={lbl("Noise")} value={last?.noise_level_avg?.toFixed(3)} unit="" color="#f472b6" icon="🔊" />
+            </>);
+          }
+          return (<>
+            <StatCard label="Temperature" value={latest?.temperature?.toFixed(1)} unit="°C" color="#fb7185" icon="🌡️" />
+            <StatCard label="Humidity" value={latest?.humidity?.toFixed(1)} unit="%" color="#60a5fa" icon="💧" />
+            <StatCard label="Pressure" value={latest?.pressure?.toFixed(0)} unit="hPa" color="#a78bfa" icon="🔵" />
+            <StatCard label="Light" value={latest?.lux?.toFixed(0)} unit="lux" color="#fbbf24" icon="☀️" />
+            <StatCard label="Noise" value={latest?.noise_level?.toFixed(3)} unit="" color="#f472b6" icon="🔊" />
+          </>);
+        })()}
       </div>
 
       {/* Loading state */}
@@ -717,6 +809,10 @@ export default function Dashboard() {
             sensor={sensor}
             data={data}
             range={range}
+            isMultiDevice={isMultiDevice}
+            devices={devices}
+            deviceColorMap={deviceColorMap}
+            deviceSettings={deviceSettings}
           />
         ))}
       </div>
@@ -731,6 +827,7 @@ export default function Dashboard() {
             sensors={group.sensors}
             data={data}
             range={range}
+            isMultiDevice={isMultiDevice}
           />
         ))}
         {/* System Info Panel */}

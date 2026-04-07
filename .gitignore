@@ -35,3 +35,16 @@ Thumbs.db
 *.tmp
 setup_database.py
 run_sql.py
+nul
+
+# Non-code folders
+Unuse/
+utilities/
+ambience-monitoring/
+music-recognition/
+documentation/
+.claude/
+
+# Misc
+*.png
+c:AMraspberry-pitest_audd.py
