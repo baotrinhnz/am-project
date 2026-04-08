@@ -134,7 +134,6 @@ export async function POST(request) {
     let attempts = 0;
     const maxAttempts = 55;
     let detectedSong = null;
-
     while (attempts < maxAttempts && !detectedSong) {
       await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
 

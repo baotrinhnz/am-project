@@ -143,7 +143,8 @@ class MusicCommandListener:
                                 "result": {
                                     "success": True,
                                     "song": f"{song.get('artist')} - {song.get('title')}",
-                                    "audio_file": str(audio_file)
+                                    "audio_file": str(audio_file),
+                                    "mic_device": self.recognizer.device
                                 },
                                 "processed_at": datetime.now(timezone.utc).isoformat()
                             }) \
@@ -163,7 +164,8 @@ class MusicCommandListener:
                                 "result": {
                                     "success": False,
                                     "error": error_msg,
-                                    "audio_file": str(audio_file) if audio_file else None
+                                    "audio_file": str(audio_file) if audio_file else None,
+                                    "mic_device": self.recognizer.device
                                 },
                                 "processed_at": datetime.now(timezone.utc).isoformat()
                             }) \

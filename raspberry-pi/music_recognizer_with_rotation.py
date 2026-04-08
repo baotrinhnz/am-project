@@ -59,7 +59,35 @@ load_dotenv(Path(__file__).parent / ".env")
 AUDD_API_TOKEN = os.getenv("AUDD_API_TOKEN")
 DEVICE_ID = os.getenv("DEVICE_ID", "rpi-enviro-01")
 
-ALSA_DEVICE = "plughw:adau7002"  # name-based — survives reboot card renumbering
+FALLBACK_DEVICE = "plughw:adau7002"
+
+
+def detect_music_mic():
+    """Auto-detect USB mic for music recognition.
+    Returns (device, format, channels).
+    USB mic is more sensitive but needs stereo 44.1kHz conversion for AudD.
+    Falls back to adau7002 with S32_LE stereo.
+    """
+    try:
+        result = subprocess.run(['arecord', '-l'], capture_output=True, text=True)
+        if result.returncode != 0:
+            return FALLBACK_DEVICE, "S32_LE", 2
+
+        import re
+        for line in result.stdout.splitlines():
+            match = re.match(r'^card\s+\d+:\s+(\S+)', line)
+            if match:
+                name = match.group(1)
+                if name != 'adau7002':
+                    device = f"plughw:{name}"
+                    log.info(f"USB mic detected: {device} (S16_LE mono)")
+                    return device, "S16_LE", 1
+
+        log.info(f"No USB mic found, using MEMS: {FALLBACK_DEVICE}")
+        return FALLBACK_DEVICE, "S32_LE", 2
+    except Exception as e:
+        log.warning(f"Mic detection failed: {e}, using {FALLBACK_DEVICE}")
+        return FALLBACK_DEVICE, "S32_LE", 2
 
 
 class MusicRecognizer:
@@ -70,12 +98,10 @@ class MusicRecognizer:
         if not self.api_token:
             raise ValueError("AUDD_API_TOKEN not provided or found in .env")
 
-        self.sample_rate = 48000
-        self.channels = 2
-        self.format = "S32_LE"
         self.duration = 10         # seconds
+        self.sample_rate = 48000
 
-        self.device = ALSA_DEVICE
+        self.device, self.format, self.channels = detect_music_mic()
 
         # File rotation settings
         self.save_dir = Path.home() / "Music_for_delete"
@@ -155,17 +181,6 @@ class MusicRecognizer:
                 log.info(f"Recording done: {output_file} ({size} bytes)")
                 detection_log.info(f"Recording done | size={size} bytes | {'OK' if size > 0 else 'EMPTY'}")
 
-                # Boost volume 10dB with sox so AudD can fingerprint better
-                boosted_file = output_file.with_suffix('.boosted.wav')
-                boost = subprocess.run(
-                    ['sox', str(output_file), str(boosted_file), 'norm', '-3'],
-                    capture_output=True, text=True
-                )
-                if boost.returncode == 0 and boosted_file.exists():
-                    output_file.unlink()
-                    boosted_file.rename(output_file)
-                    log.info(f"Audio boosted 15dB: {output_file}")
-
                 recordings = sorted(glob.glob(str(self.save_dir / "music_record*.wav")))
                 log.info(f"Total recordings in folder: {len(recordings)}")
                 return output_file
@@ -203,11 +218,27 @@ class MusicRecognizer:
             log.error(f"Recording is empty (0 bytes): {audio_file} — not uploading")
             return {"error": "Recording failed: file is empty (0 bytes)"}
 
-        log.info(f"Sending {audio_file} ({file_size} bytes) to AudD API...")
-        detection_log.info(f"Uploading to AudD | file={Path(audio_file).name} | size={file_size} bytes")
+        # Convert mono to stereo 44.1kHz for AudD (improves fingerprinting)
+        upload_file = Path(audio_file)
+        converted = Path(str(audio_file) + '.audd.wav')
+        if self.channels == 1:
+            try:
+                conv = subprocess.run(
+                    ['sox', str(audio_file), '-r', '44100', '-c', '2', str(converted)],
+                    capture_output=True, text=True
+                )
+                if conv.returncode == 0 and converted.exists():
+                    upload_file = converted
+                    file_size = converted.stat().st_size
+                    log.info(f"Converted to stereo 44.1kHz: {file_size} bytes")
+            except Exception:
+                pass
+
+        log.info(f"Sending {upload_file} ({file_size} bytes) to AudD API...")
+        detection_log.info(f"Uploading to AudD | file={upload_file.name} | size={file_size} bytes")
 
         try:
-            with open(audio_file, 'rb') as f:
+            with open(upload_file, 'rb') as f:
                 response = requests.post(
                     'https://api.audd.io/',
                     data={
@@ -217,6 +248,8 @@ class MusicRecognizer:
                     files={'file': f},
                     timeout=60
                 )
+            if converted.exists():
+                converted.unlink(missing_ok=True)
 
             if response.status_code == 200:
                 result = response.json()
@@ -263,7 +296,7 @@ class MusicRecognizer:
             log.info("Audio devices:\n" + result.stdout)
 
             # Re-detect device
-            self.device = self._find_mems_device()
+            self.device, self.format, self.channels = detect_music_mic()
 
             # Test 1-second recording
             test_cmd = [

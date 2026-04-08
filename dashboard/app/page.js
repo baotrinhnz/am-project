@@ -450,6 +450,7 @@ export default function Dashboard() {
   const [isMultiDevice, setIsMultiDevice] = useState(false);
   const [deviceColorMap, setDeviceColorMap] = useState({});
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [deviceDropdownOpen, setDeviceDropdownOpen] = useState(false);
   const [musicSectionOpen, setMusicSectionOpen] = useState(false);
   const [theme, setTheme] = useState('dark');
 
@@ -552,11 +553,12 @@ export default function Dashboard() {
     fetchData();
   }, [fetchData]);
 
-  // Auto-refresh every 60s
+  // Auto-refresh every 60s (pause when settings modal is open)
   useEffect(() => {
+    if (settingsOpen) return;
     const interval = setInterval(fetchData, 60000);
     return () => clearInterval(interval);
-  }, [fetchData]);
+  }, [fetchData, settingsOpen]);
 
   // Realtime subscription
   useEffect(() => {
@@ -596,29 +598,28 @@ export default function Dashboard() {
 
   return (
     <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
-      {/* Header */}
-      <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-              Ambience Monitor
-            </h1>
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot" />
-              <span className="text-[10px] text-emerald-400 font-medium uppercase tracking-wider">Live</span>
-            </div>
+      {/* Header - Top Bar */}
+      <header className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+            Ambience Monitor
+          </h1>
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot" />
+            <span className="text-[10px] text-emerald-400 font-medium uppercase tracking-wider">Live</span>
           </div>
-          <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-            {latest?.device_id ? deviceSettings.getDeviceInfo(latest.device_id).displayName : 'rpi-enviro-01'} &middot;{' '}
-            {lastUpdate ? `Updated ${format(lastUpdate, 'HH:mm:ss')} · ${format(lastUpdate, 'MMM d')}` : 'Connecting...'} &middot; BaoT
-          </p>
+          <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+            {lastUpdate ? `Last updated: ${format(lastUpdate, 'HH:mm:ss')} · ${format(lastUpdate, 'MMM d')}` : 'Connecting...'}
+          </span>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3">
-          {/* Theme Toggle Button */}
+        <div className="flex items-center gap-2">
+          {/* Service Status Indicators */}
+          <SimpleServiceStatus devices={devices} deviceSettings={deviceSettings} />
+          {/* Theme Toggle - Icon only */}
           <button
             onClick={toggleTheme}
-            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+            className="w-8 h-8 flex items-center justify-center rounded-lg transition-all"
             style={{
               background: 'var(--surface-2)',
               border: '1px solid var(--border-color)',
@@ -627,36 +628,19 @@ export default function Dashboard() {
             title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
             {theme === 'dark' ? (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-                Light
-              </>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
             ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                </svg>
-                Dark
-              </>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+              </svg>
             )}
           </button>
-          {/* Music Recognise Button */}
-          <button
-            onClick={() => setMusicSectionOpen(o => !o)}
-            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
-            style={musicSectionOpen
-              ? { background: 'rgba(96,165,250,0.15)', border: '1px solid rgba(96,165,250,0.3)', color: '#60a5fa' }
-              : { background: 'var(--surface-2)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }
-            }
-          >
-            🎵 Music Recognise
-          </button>
-          {/* Settings Button */}
+          {/* Settings - Icon only */}
           <button
             onClick={() => setSettingsOpen(true)}
-            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+            className="w-8 h-8 flex items-center justify-center rounded-lg transition-all"
             style={{
               background: 'var(--surface-2)',
               border: '1px solid var(--border-color)',
@@ -668,76 +652,100 @@ export default function Dashboard() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            Settings
           </button>
-          {/* Device Selector */}
-          <div className="flex gap-1 p-1 rounded-lg" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-color)' }}>
+        </div>
+      </header>
+
+      {/* Controls Bar */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        {/* Music Recognise Button */}
+        <button
+          onClick={() => setMusicSectionOpen(o => !o)}
+          className="flex items-center justify-center gap-2 px-8 py-2 text-sm font-bold rounded-lg transition-all"
+          style={musicSectionOpen
+            ? { background: 'linear-gradient(135deg, rgba(96,165,250,0.3), rgba(139,92,246,0.3))', border: '1px solid rgba(96,165,250,0.5)', color: '#60a5fa', boxShadow: '0 0 16px rgba(96,165,250,0.25)' }
+            : { background: 'linear-gradient(135deg, rgba(96,165,250,0.18), rgba(139,92,246,0.18))', border: '1px solid rgba(96,165,250,0.35)', color: '#a5c4fd', boxShadow: '0 0 8px rgba(96,165,250,0.1)' }
+          }
+        >
+          🎵 Music Recognise
+        </button>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Device Selector - Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setDeviceDropdownOpen(o => !o)}
+            className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-all"
+            style={{ background: 'var(--surface-2)', border: '1px solid var(--border-color)', color: selectedDevice === 'all' ? 'var(--text-secondary)' : '#a78bfa' }}
+          >
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: selectedDevice === 'all' ? 'var(--text-tertiary)' : '#a78bfa' }} />
+            {selectedDevice === 'all' ? 'All Devices' : deviceSettings.getDeviceInfo(selectedDevice).displayName}
+            <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {deviceDropdownOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setDeviceDropdownOpen(false)} />
+              <div className="absolute top-full left-0 mt-1 z-50 min-w-[180px] rounded-lg shadow-xl overflow-hidden"
+                style={{ background: 'var(--surface-1)', border: '1px solid var(--border-color)' }}
+              >
+                <button
+                  onClick={() => { setSelectedDevice('all'); setDeviceDropdownOpen(false); }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium transition-all text-left"
+                  style={selectedDevice === 'all'
+                    ? { background: 'rgba(168, 85, 247, 0.15)', color: '#a78bfa' }
+                    : { color: 'var(--text-tertiary)' }
+                  }
+                >
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: selectedDevice === 'all' ? '#a78bfa' : 'var(--text-tertiary)', opacity: selectedDevice === 'all' ? 1 : 0.4 }} />
+                  All Devices
+                </button>
+                {devices.map(deviceId => {
+                  const deviceInfo = deviceSettings.getDeviceInfo(deviceId);
+                  return (
+                    <button
+                      key={deviceId}
+                      onClick={() => { setSelectedDevice(deviceId); setDeviceDropdownOpen(false); }}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium transition-all text-left"
+                      style={selectedDevice === deviceId
+                        ? { background: 'rgba(168, 85, 247, 0.15)', color: '#a78bfa' }
+                        : { color: 'var(--text-tertiary)' }
+                      }
+                      title={deviceInfo.note || deviceInfo.location || deviceId}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: selectedDevice === deviceId ? '#a78bfa' : 'var(--text-tertiary)', opacity: selectedDevice === deviceId ? 1 : 0.4 }} />
+                      <span>{deviceInfo.displayName}</span>
+                      {deviceInfo.location && (
+                        <span className="ml-1 text-[10px] opacity-50">({deviceInfo.location})</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Time Range Selector */}
+        <div className="flex gap-1 p-1 rounded-lg" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-color)' }}>
+          {TIME_RANGES.map(r => (
             <button
-              onClick={() => setSelectedDevice('all')}
-              className="px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap"
-              style={selectedDevice === 'all'
-                ? { background: 'rgba(168, 85, 247, 0.2)', color: '#a78bfa' }
+              key={r.label}
+              onClick={() => setRange(r)}
+              className="px-3 py-1.5 text-xs font-medium rounded-md transition-all"
+              style={range.label === r.label
+                ? { background: 'rgba(20, 184, 166, 0.2)', color: 'var(--accent-teal)' }
                 : { color: 'var(--text-tertiary)' }
               }
             >
-              All Devices
+              {r.label}
             </button>
-            {devices.map(deviceId => {
-              const deviceInfo = deviceSettings.getDeviceInfo(deviceId);
-              return (
-                <button
-                  key={deviceId}
-                  onClick={() => setSelectedDevice(deviceId)}
-                  className="px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap relative group"
-                  style={selectedDevice === deviceId
-                    ? { background: 'rgba(168, 85, 247, 0.2)', color: '#a78bfa' }
-                    : { color: 'var(--text-tertiary)' }
-                  }
-                  title={deviceInfo.note || deviceInfo.location || deviceId}
-                >
-                  <span>{deviceInfo.displayName}</span>
-                  {deviceInfo.location && (
-                    <span className="ml-1.5 text-[10px] opacity-50">({deviceInfo.location})</span>
-                  )}
-                  {/* Tooltip for note */}
-                  {deviceInfo.note && (
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 rounded-lg shadow-xl text-xs whitespace-normal max-w-xs opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50"
-                      style={{ background: 'var(--surface-1)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}
-                    >
-                      <div className="font-medium mb-1" style={{ color: 'var(--text-primary)' }}>{deviceInfo.displayName}</div>
-                      {deviceInfo.location && (
-                        <div className="text-[10px] mb-1" style={{ color: 'var(--text-tertiary)' }}>📍 {deviceInfo.location}</div>
-                      )}
-                      <div style={{ color: 'var(--text-secondary)' }}>{deviceInfo.note}</div>
-                      <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 rotate-45" style={{ background: 'var(--surface-1)', borderRight: '1px solid var(--border-color)', borderBottom: '1px solid var(--border-color)' }} />
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Service Status Indicators */}
-          <SimpleServiceStatus />
-
-          {/* Time Range Selector */}
-          <div className="flex gap-1 p-1 rounded-lg" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-color)' }}>
-            {TIME_RANGES.map(r => (
-              <button
-                key={r.label}
-                onClick={() => setRange(r)}
-                className="px-3 py-1.5 text-xs font-medium rounded-md transition-all"
-                style={range.label === r.label
-                  ? { background: 'rgba(20, 184, 166, 0.2)', color: 'var(--accent-teal)' }
-                  : { color: 'var(--text-tertiary)' }
-                }
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
+          ))}
         </div>
-      </header>
+      </div>
 
       {/* Music Section */}
       {musicSectionOpen && (

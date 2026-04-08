@@ -122,36 +122,32 @@ def compensate_temperature(raw_temp, cpu_temp, factor=2.25):
     return raw_temp - ((cpu_temp - raw_temp) / factor)
 
 
-# --- LED Control -------------------------------------------------------------
-def init_led():
-    """Initialize and turn on the RGB LED on Enviro+."""
+# --- LCD Status Display ------------------------------------------------------
+def init_lcd():
+    """Show Online status on Enviro+ LCD (ST7735)."""
     try:
-        import pigpio
-        # Enviro+ RGB LED uses GPIO pins: R=6, G=16, B=24
+        import st7735
+        from PIL import Image, ImageDraw, ImageFont
+        from fonts.ttf import RobotoMedium as UserFont
 
-        pi = pigpio.pi()
-        if not pi.connected:
-            raise Exception("pigpio daemon not running")
+        disp = st7735.ST7735(
+            port=0, cs=1, dc="GPIO9", backlight="GPIO12",
+            rotation=270, spi_speed_hz=10000000
+        )
+        disp.begin()
 
-        LED_R = 6
-        LED_G = 16
-        LED_B = 24
+        img = Image.new("RGB", (disp.width, disp.height), color=(0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        font = ImageFont.truetype(UserFont, 20)
+        draw.rectangle((0, 0, disp.width, disp.height), (0, 100, 0))
+        draw.text((10, 25), "Online", font=font, fill=(255, 255, 255))
+        disp.display(img)
 
-        # Set as output
-        pi.set_mode(LED_R, pigpio.OUTPUT)
-        pi.set_mode(LED_G, pigpio.OUTPUT)
-        pi.set_mode(LED_B, pigpio.OUTPUT)
-
-        # Turn on LED with cyan color (Green + Blue)
-        pi.write(LED_R, 0)   # Red OFF
-        pi.write(LED_G, 1)   # Green ON
-        pi.write(LED_B, 1)   # Blue ON
-
-        log.info("✓ RGB LED initialized (cyan)")
-        return True
+        log.info("✓ LCD: Online")
+        return disp
     except Exception as e:
-        log.warning(f"LED initialization failed: {e}")
-        return False
+        log.warning(f"LCD initialization failed: {e}")
+        return None
 
 
 # --- Sensor Readers ----------------------------------------------------------
@@ -374,7 +370,7 @@ def run(interval: int = 0, show_lcd: bool = False, music_detection: bool = False
     client = get_supabase_client()
 
     # Initialize RGB LED
-    init_led()
+    init_lcd()
 
     log.info(f"Starting Enviro+ Monitor | device={DEVICE_ID}")
     log.info(f"Supabase: {'connected' if client else 'disabled'}")
