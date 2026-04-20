@@ -848,8 +848,8 @@ export default function Dashboard() {
 
       {/* Beat Rate — full width, two columns */}
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <BpmWidget range={range} deviceId={selectedDevice} />
-        <MusicBpmWidget range={range} deviceId={selectedDevice} />
+        <BpmWidget range={range} deviceId={selectedDevice} deviceSettings={deviceSettings} />
+        <MusicBpmWidget range={range} deviceId={selectedDevice} deviceSettings={deviceSettings} />
       </div>
 
       {/* Footer */}

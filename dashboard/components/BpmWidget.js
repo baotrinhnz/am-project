@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { format, parseISO } from 'date-fns';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { getDeviceColorMap } from '../lib/multiDeviceData';
 
 const LOCAL_RANGES = [
   { label: '5m',  minutes: 5 },
@@ -12,12 +13,15 @@ const LOCAL_RANGES = [
   { label: '↑',   minutes: null },  // follow global
 ];
 
-export default function BpmWidget({ range, deviceId }) {
+export default function BpmWidget({ range, deviceId, deviceSettings }) {
   const [data, setData] = useState([]);
   const [latest, setLatest] = useState(null);
   const [loading, setLoading] = useState(true);
   const [localRange, setLocalRange] = useState(LOCAL_RANGES[0]);
   const [hoveredBpm, setHoveredBpm] = useState(null);
+  const [activeDevices, setActiveDevices] = useState([]);
+
+  const isMultiDevice = !deviceId || deviceId === 'all';
 
   const effectiveMinutes = localRange.minutes ?? (
     range?.unit === 'days' ? range.value * 24 * 60 : (range?.value || 6) * 60
@@ -31,21 +35,36 @@ export default function BpmWidget({ range, deviceId }) {
 
     let query = supabase
       .from('bpm_readings')
-      .select('bpm, recorded_at')
+      .select('bpm, recorded_at, device_id')
       .gte('recorded_at', since)
       .order('recorded_at', { ascending: true })
-      .limit(500);
+      .limit(1000);
 
-    if (deviceId && deviceId !== 'all') {
+    if (!isMultiDevice) {
       query = query.eq('device_id', deviceId);
     }
 
     const { data: rows } = await query;
     if (rows?.length) {
-      setData(rows);
+      if (isMultiDevice) {
+        // Pivot by time: each row has bpm_<device> columns
+        const devices = [...new Set(rows.map(r => r.device_id))].sort();
+        setActiveDevices(devices);
+        const pivoted = rows.map(r => ({
+          recorded_at: r.recorded_at,
+          [`bpm_${r.device_id}`]: r.bpm,
+          device_id: r.device_id,
+          bpm: r.bpm,
+        }));
+        setData(pivoted);
+      } else {
+        setData(rows);
+        setActiveDevices([deviceId]);
+      }
       setLatest(rows[rows.length - 1]);
     } else {
       setData([]);
+      setActiveDevices([]);
     }
     setLoading(false);
   };
@@ -131,37 +150,68 @@ export default function BpmWidget({ range, deviceId }) {
       </div>
 
       {/* Chart */}
-      {data.length > 1 && (
-        <ResponsiveContainer width="100%" height={80}>
-          <AreaChart data={data} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}
-            onMouseMove={state => {
-              if (state?.isTooltipActive && state.activePayload?.[0]) {
-                setHoveredBpm(parseFloat(state.activePayload[0].value.toFixed(1)));
-              }
-            }}
-            onMouseLeave={() => setHoveredBpm(null)}>
-            <defs>
-              <linearGradient id="bpmGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#fbbf24" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <XAxis dataKey="recorded_at" tickFormatter={formatTime}
-              tick={{ fontSize: 9, fill: 'var(--text-tertiary)' }}
-              stroke="var(--border-color)" tickLine={false} />
-            <YAxis domain={['auto', 'auto']}
-              tick={{ fontSize: 9, fill: 'var(--text-tertiary)' }}
-              stroke="var(--border-color)" tickLine={false} />
-            <Tooltip
-              contentStyle={{ background: 'var(--surface-1)', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: 11 }}
-              labelFormatter={formatTime}
-              formatter={(v) => [`${parseFloat(v.toFixed(1))} BPM`, 'Ambient Beat']}
-            />
-            <Area type="monotone" dataKey="bpm" stroke="#fbbf24" strokeWidth={1.5}
-              fill="url(#bpmGrad)" dot={false} activeDot={{ r: 4, fill: '#fbbf24', strokeWidth: 0 }} />
-          </AreaChart>
-        </ResponsiveContainer>
-      )}
+      {data.length > 1 && (() => {
+        const colorMap = getDeviceColorMap(activeDevices);
+        return (
+          <>
+            <ResponsiveContainer width="100%" height={80}>
+              <AreaChart data={data} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}
+                onMouseMove={state => {
+                  if (state?.isTooltipActive && state.activePayload?.[0]) {
+                    setHoveredBpm(parseFloat(state.activePayload[0].value.toFixed(1)));
+                  }
+                }}
+                onMouseLeave={() => setHoveredBpm(null)}>
+                <defs>
+                  {activeDevices.map(id => (
+                    <linearGradient key={id} id={`bpmGrad-${id}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={colorMap[id]} stopOpacity={0.3} />
+                      <stop offset="95%" stopColor={colorMap[id]} stopOpacity={0} />
+                    </linearGradient>
+                  ))}
+                </defs>
+                <XAxis dataKey="recorded_at" tickFormatter={formatTime}
+                  tick={{ fontSize: 9, fill: 'var(--text-tertiary)' }}
+                  stroke="var(--border-color)" tickLine={false} />
+                <YAxis domain={['auto', 'auto']}
+                  tick={{ fontSize: 9, fill: 'var(--text-tertiary)' }}
+                  stroke="var(--border-color)" tickLine={false} />
+                <Tooltip
+                  contentStyle={{ background: 'var(--surface-1)', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: 11 }}
+                  labelFormatter={formatTime}
+                />
+                {isMultiDevice ? (
+                  activeDevices.map(id => (
+                    <Area key={id} type="monotone"
+                      dataKey={`bpm_${id}`}
+                      name={deviceSettings?.getDeviceInfo(id).displayName || id}
+                      stroke={colorMap[id]} strokeWidth={1.5}
+                      fill={`url(#bpmGrad-${id})`}
+                      dot={false} connectNulls
+                      activeDot={{ r: 4, fill: colorMap[id], strokeWidth: 0 }} />
+                  ))
+                ) : (
+                  <Area type="monotone" dataKey="bpm" stroke="#fbbf24" strokeWidth={1.5}
+                    fill={`url(#bpmGrad-${deviceId})`}
+                    dot={false} activeDot={{ r: 4, fill: '#fbbf24', strokeWidth: 0 }} />
+                )}
+              </AreaChart>
+            </ResponsiveContainer>
+            {isMultiDevice && activeDevices.length > 1 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {activeDevices.map(id => (
+                  <div key={id} className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full" style={{ background: colorMap[id] }} />
+                    <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+                      {deviceSettings?.getDeviceInfo(id).displayName || id}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }
