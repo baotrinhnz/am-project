@@ -335,7 +335,13 @@ function ChartPanel({ title, icon, sensors, data, range, isMultiDevice }) {
 function SystemInfoPanel({ data, range, devices }) {
   // Calculate metrics from data
   const totalReadings = data.length;
-  const activeDeviceCount = devices.length;
+  // Count only devices with data in last 2 min (actually online)
+  const twoMinAgo = Date.now() - 120000;
+  const activeDeviceCount = new Set(
+    data.filter(d => d.recorded_at && new Date(d.recorded_at).getTime() >= twoMinAgo)
+        .map(d => d.device_id)
+        .filter(Boolean)
+  ).size;
 
   // Calculate readings per hour
   const timeRangeHours = range.unit === 'hours' ? range.value : range.value * 24;
@@ -658,17 +664,7 @@ export default function Dashboard() {
 
       {/* Controls Bar */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        {/* Music Recognise Button */}
-        <button
-          onClick={() => setMusicSectionOpen(o => !o)}
-          className="flex items-center justify-center gap-2 px-8 py-2 text-sm font-bold rounded-lg transition-all"
-          style={musicSectionOpen
-            ? { background: 'linear-gradient(135deg, rgba(96,165,250,0.3), rgba(139,92,246,0.3))', border: '1px solid rgba(96,165,250,0.5)', color: '#60a5fa', boxShadow: '0 0 16px rgba(96,165,250,0.25)' }
-            : { background: 'linear-gradient(135deg, rgba(96,165,250,0.18), rgba(139,92,246,0.18))', border: '1px solid rgba(96,165,250,0.35)', color: '#a5c4fd', boxShadow: '0 0 8px rgba(96,165,250,0.1)' }
-          }
-        >
-          🎵 Music Recognise
-        </button>
+        {/* Music Recognise button removed — auto detection runs on Pi every 2 min */}
 
         {/* Spacer */}
         <div className="flex-1" />

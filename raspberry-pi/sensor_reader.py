@@ -211,32 +211,32 @@ class EnviroSensors:
             log.error(f"Gas sensor read error: {e}")
 
         # MEMS microphone - noise level (simple amplitude reading)
-        try:
-            # enviroplus noise module (if available)
-            from enviroplus.noise import Noise
-            noise_sensor = Noise()
-
-            # Sample noise across multiple frequency bands
-            amps = noise_sensor.get_amplitudes_at_frequency_ranges([
-                (20, 200),      # Low frequency
-                (200, 800),     # Mid frequency
-                (800, 2000),    # High frequency
-            ])
-
-            # Calculate average amplitude
-            if amps and len(amps) > 0:
-                avg_noise = sum(amps) / len(amps)
-                data["noise_level"] = round(avg_noise, 4)
-                log.debug(f"Noise level: {avg_noise:.4f}")
-            else:
-                data["noise_level"] = 0.0
-
-        except ImportError:
-            log.warning("Noise module not available. Install: pip3 install sounddevice numpy")
+        # Skip if bpm_monitor or music_recognizer is using the mic
+        mic_busy = Path('/tmp/mic_in_use.lock').exists() or Path('/tmp/music_detection_active.lock').exists()
+        if mic_busy:
+            log.debug("Mic busy (BPM/music recording), skipping noise reading")
             data["noise_level"] = None
-        except Exception as e:
-            log.warning(f"Noise sensor error: {e}")
-            data["noise_level"] = None
+        else:
+            try:
+                from enviroplus.noise import Noise
+                noise_sensor = Noise()
+                amps = noise_sensor.get_amplitudes_at_frequency_ranges([
+                    (20, 200),
+                    (200, 800),
+                    (800, 2000),
+                ])
+                if amps and len(amps) > 0:
+                    avg_noise = sum(amps) / len(amps)
+                    data["noise_level"] = round(avg_noise, 4)
+                    log.debug(f"Noise level: {avg_noise:.4f}")
+                else:
+                    data["noise_level"] = 0.0
+            except ImportError:
+                log.warning("Noise module not available. Install: pip3 install sounddevice numpy")
+                data["noise_level"] = None
+            except Exception as e:
+                log.warning(f"Noise sensor error: {e}")
+                data["noise_level"] = None
 
         # PMS5003 particulate matter (if connected)
         if self.pms5003:
