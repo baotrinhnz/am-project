@@ -10,7 +10,7 @@ import {
 import { useDeviceSettings } from '../hooks/useDeviceSettings';
 import { pivotDataForMultiDevice, getDeviceColorMap } from '../lib/multiDeviceData';
 import SettingsModal from '../components/SettingsModal';
-import MusicDetections from '../components/MusicDetections';
+import MusicAutoHistory from '../components/MusicAutoHistory';
 import SimpleServiceStatus from '../components/SimpleServiceStatus';
 import BpmWidget from '../components/BpmWidget';
 import MusicBpmWidget from '../components/MusicBpmWidget';
@@ -664,7 +664,17 @@ export default function Dashboard() {
 
       {/* Controls Bar */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        {/* Music Recognise button removed — auto detection runs on Pi every 2 min */}
+        {/* Music History Button */}
+        <button
+          onClick={() => setMusicSectionOpen(o => !o)}
+          className="flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-lg transition-all"
+          style={musicSectionOpen
+            ? { background: 'rgba(168,85,247,0.2)', border: '1px solid rgba(168,85,247,0.5)', color: '#a78bfa' }
+            : { background: 'var(--surface-2)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }
+          }
+        >
+          📜 Music History
+        </button>
 
         {/* Spacer */}
         <div className="flex-1" />
@@ -746,8 +756,7 @@ export default function Dashboard() {
       {/* Music Section */}
       {musicSectionOpen && (
         <div className="mb-6">
-          <MusicDetections
-            devices={devices}
+          <MusicAutoHistory
             deviceSettings={deviceSettings}
             isDarkMode={theme === 'dark'}
           />
