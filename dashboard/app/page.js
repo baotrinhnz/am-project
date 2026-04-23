@@ -332,16 +332,29 @@ function ChartPanel({ title, icon, sensors, data, range, isMultiDevice }) {
 }
 
 // ─── System Info Panel ──────────────────────────────────────────────────────
-function SystemInfoPanel({ data, range, devices }) {
-  // Calculate metrics from data
-  const totalReadings = data.length;
-  // Count only devices with data in last 2 min (actually online)
-  const twoMinAgo = Date.now() - 120000;
-  const activeDeviceCount = new Set(
-    data.filter(d => d.recorded_at && new Date(d.recorded_at).getTime() >= twoMinAgo)
-        .map(d => d.device_id)
-        .filter(Boolean)
-  ).size;
+function SystemInfoPanel({ data, range, devices, selectedDevice }) {
+  // Query raw row count for accurate update rate (data state is pivoted in multi-device mode)
+  const [rawCount, setRawCount] = useState(0);
+  useEffect(() => {
+    const since = getTimeAgo(range.unit, range.value).toISOString();
+    let q = supabase.from('sensor_readings').select('*', { count: 'exact', head: true }).gte('recorded_at', since);
+    if (selectedDevice !== 'all') q = q.eq('device_id', selectedDevice);
+    q.then(({ count }) => setRawCount(count || 0));
+  }, [range, selectedDevice]);
+
+  const totalReadings = rawCount;
+  // Count devices that have data in the latest bucket (works for both pivoted and raw)
+  const activeDeviceCount = (() => {
+    if (!data.length) return 0;
+    const last = data[data.length - 1];
+    const fromPivot = devices.filter(id => last[`temperature_${id}`] != null).length;
+    if (fromPivot > 0) return fromPivot;
+    const twoMinAgo = Date.now() - 120000;
+    return new Set(
+      data.filter(d => d.recorded_at && new Date(d.recorded_at).getTime() >= twoMinAgo)
+          .map(d => d.device_id).filter(Boolean)
+    ).size;
+  })();
 
   // Calculate readings per hour
   const timeRangeHours = range.unit === 'hours' ? range.value : range.value * 24;
@@ -370,12 +383,20 @@ function SystemInfoPanel({ data, range, devices }) {
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="rounded-lg p-3" style={{ background: 'var(--surface-2)', opacity: 0.7 }}>
-          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--text-tertiary)' }}>Data Points</div>
+        <div className="rounded-lg p-3 cursor-help"
+             style={{ background: 'var(--surface-2)', opacity: 0.7 }}
+             title="Total sensor readings pushed to Supabase in the selected time range (across all filtered devices).">
+          <div className="text-[10px] uppercase tracking-wider mb-1 flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
+            Data Points <span className="opacity-60">ⓘ</span>
+          </div>
           <div className="text-2xl font-mono font-semibold text-cyan-400">{totalReadings}</div>
         </div>
-        <div className="rounded-lg p-3" style={{ background: 'var(--surface-2)', opacity: 0.7 }}>
-          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--text-tertiary)' }}>Update Rate</div>
+        <div className="rounded-lg p-3 cursor-help"
+             style={{ background: 'var(--surface-2)', opacity: 0.7 }}
+             title="Average readings per hour = Data Points ÷ range hours. Each Pi pushes one reading per minute (~60/h), so 2 Pi ≈ 120/h.">
+          <div className="text-[10px] uppercase tracking-wider mb-1 flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
+            Update Rate <span className="opacity-60">ⓘ</span>
+          </div>
           <div className="text-2xl font-mono font-semibold text-emerald-400">{readingsPerHour}<span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>/h</span></div>
         </div>
         <div className="rounded-lg p-3" style={{ background: 'var(--surface-2)', opacity: 0.7 }}>
@@ -848,6 +869,7 @@ export default function Dashboard() {
           data={data}
           range={range}
           devices={devices}
+          selectedDevice={selectedDevice}
         />
       </div>
 
