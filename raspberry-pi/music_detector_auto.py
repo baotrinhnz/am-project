@@ -129,6 +129,7 @@ def identify_audd(audio_file: Path) -> dict:
         if data.get('status') == 'success' and data.get('result'):
             res = data['result']
             spotify = res.get('spotify') or {}
+            deezer  = res.get('deezer') or {}
             return {
                 'status': 'detected',
                 'title':  res.get('title'),
@@ -136,6 +137,7 @@ def identify_audd(audio_file: Path) -> dict:
                 'album':  res.get('album'),
                 'genre':  None,  # AudD doesn't provide genre
                 'spotify_track_id': spotify.get('id'),
+                'deezer_track_id':  deezer.get('id'),
                 'service_track_id': res.get('song_link') or res.get('isrc'),
                 'raw': data,
             }
@@ -182,6 +184,7 @@ def identify_acrcloud(audio_file: Path) -> dict:
             track = res['metadata']['music'][0]
             external = track.get('external_metadata', {})
             spotify  = external.get('spotify', {}).get('track', {})
+            deezer   = external.get('deezer', {}).get('track', {})
             genres   = track.get('genres', [])
             artists  = track.get('artists', [])
             return {
@@ -191,6 +194,7 @@ def identify_acrcloud(audio_file: Path) -> dict:
                 'album':  (track.get('album') or {}).get('name'),
                 'genre':  genres[0].get('name') if genres else None,
                 'spotify_track_id': spotify.get('id'),
+                'deezer_track_id':  deezer.get('id'),
                 'service_track_id': track.get('acrid'),
                 'raw': res,
             }
@@ -202,11 +206,36 @@ def identify_acrcloud(audio_file: Path) -> dict:
         return {'status': 'error', 'raw': {'error': str(e)}}
 
 
+# ── Deezer BPM (free, no auth) ──────────────────────────────────────────────
+def get_deezer_bpm(track_id):
+    """Returns BPM (float) from Deezer track endpoint, or None."""
+    if not track_id:
+        return None
+    try:
+        r = requests.get(f'https://api.deezer.com/track/{track_id}', timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            bpm = data.get('bpm')
+            return float(bpm) if bpm else None
+        log.warning(f"Deezer HTTP {r.status_code}: {r.text[:100]}")
+    except Exception as e:
+        log.warning(f"Deezer BPM fetch failed: {e}")
+    return None
+
+
 # ── Supabase ─────────────────────────────────────────────────────────────────
 def get_supabase():
     if not SUPABASE_URL or not SUPABASE_KEY:
         raise RuntimeError("SUPABASE_URL or SUPABASE_SERVICE_KEY not set")
     return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+def insert_bpm_reading(supabase, bpm: float):
+    supabase.table("music_bpm_readings").insert({
+        "device_id":   DEVICE_ID,
+        "bpm":         bpm,
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+    }).execute()
 
 
 def insert_detection(supabase, result: dict):
@@ -251,6 +280,17 @@ def main():
                 if result['status'] == 'detected':
                     log.info(f"Detected: {result['artist']} - {result['title']}"
                              + (f" [{result['genre']}]" if result.get('genre') else ""))
+                    # Fetch BPM from Deezer and write to music_bpm_readings
+                    deezer_id = result.get('deezer_track_id')
+                    if deezer_id:
+                        tempo = get_deezer_bpm(deezer_id)
+                        if tempo and tempo > 0:
+                            bpm = round(float(tempo), 1)
+                            try:
+                                insert_bpm_reading(supabase, bpm)
+                                log.info(f"  → Deezer BPM: {bpm}")
+                            except Exception as e:
+                                log.warning(f"  → BPM insert failed: {e}")
                 else:
                     log.info(f"Status: {result['status']}")
         except Exception as e:

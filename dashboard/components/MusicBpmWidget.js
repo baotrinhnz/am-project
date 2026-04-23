@@ -6,9 +6,9 @@ import { format, parseISO } from 'date-fns';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const LOCAL_RANGES = [
-  { label: '5m',  minutes: 5 },
-  { label: '30m', minutes: 30 },
   { label: '1H',  minutes: 60 },
+  { label: '6H',  minutes: 360 },
+  { label: '24H', minutes: 1440 },
   { label: '↑',   minutes: null },
 ];
 
