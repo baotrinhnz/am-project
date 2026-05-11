@@ -15,9 +15,10 @@ import base64
 import hmac
 import hashlib
 import json
+import shutil
 import logging
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import requests
@@ -31,6 +32,7 @@ SUPABASE_URL    = os.getenv("SUPABASE_URL")
 SUPABASE_KEY    = os.getenv("SUPABASE_SERVICE_KEY")
 DEVICE_ID       = os.getenv("DEVICE_ID", "rpi-enviro-01")
 VENUE_NAME      = os.getenv("VENUE_NAME", "Empire")
+LOCATION        = os.getenv("LOCATION", "")      # e.g. "Front Bar" / "Second Bar"
 DETECT_SERVICE  = os.getenv("DETECT_SERVICE", "audd").lower()  # 'audd' or 'acrcloud'
 
 AUDD_API_TOKEN        = os.getenv("AUDD_API_TOKEN")
@@ -46,7 +48,38 @@ FALLBACK_DEVICE = "plughw:adau7002"
 SAVE_DIR  = Path.home() / "Music_auto"
 MAX_FILES = 5
 
+UNRECOGNIZED_DIR         = Path.home() / "Music_unrecognized"
+UNRECOGNIZED_RETAIN_DAYS = 14
+
 MIC_LOCK = Path('/tmp/mic_in_use.lock')
+
+# Opening hours — 24h scale, end > 24 means spill to next day
+# weekday(): Mon=0, Tue=1, ..., Sun=6
+SCHEDULE = {
+    0: (11, 22),   # Mon  11am - 10pm
+    1: (11, 22),   # Tue
+    2: (11, 22),   # Wed
+    3: (11, 24),   # Thu  11am - 12am (midnight)
+    4: (11, 25),   # Fri  11am - 1am Sat
+    5: (12, 25),   # Sat  12pm - 1am Sun
+    # Sun (6): closed
+}
+
+
+def is_open(now=None):
+    now = now or datetime.now()
+    # Check today and yesterday (because Fri 1am belongs to Thu's window, etc.)
+    for offset in (0, -1):
+        day = now + timedelta(days=offset)
+        sched = SCHEDULE.get(day.weekday())
+        if not sched:
+            continue
+        start_hr, end_hr = sched
+        start_dt = day.replace(hour=start_hr, minute=0, second=0, microsecond=0)
+        end_dt = start_dt + timedelta(hours=end_hr - start_hr)
+        if start_dt <= now < end_dt:
+            return True
+    return False
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -77,13 +110,14 @@ def detect_mic():
 
 # ── Recording ────────────────────────────────────────────────────────────────
 def _next_file() -> Path:
+    """Filename: {device_id}_{YYYYMMDD_HHMMSS}.wav. Rotation keeps last MAX_FILES."""
     SAVE_DIR.mkdir(exist_ok=True)
-    files = sorted(SAVE_DIR.glob("auto_*.wav"))
+    files = sorted(SAVE_DIR.glob("*.wav"), key=lambda p: p.stat().st_mtime)
     while len(files) >= MAX_FILES:
         files.pop(0).unlink(missing_ok=True)
-        files = sorted(SAVE_DIR.glob("auto_*.wav"))
-    idx = len(files) + 1
-    return SAVE_DIR / f"auto_{idx:03d}.wav"
+        files = sorted(SAVE_DIR.glob("*.wav"), key=lambda p: p.stat().st_mtime)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return SAVE_DIR / f"{DEVICE_ID}_{ts}.wav"
 
 
 def record_audio(device, fmt, channels, duration):
@@ -242,6 +276,7 @@ def insert_detection(supabase, result: dict):
     supabase.table("music_auto_detections").insert({
         "device_id":        DEVICE_ID,
         "venue_name":       VENUE_NAME,
+        "location":         LOCATION,
         "service":          DETECT_SERVICE,
         "status":           result['status'],
         "spotify_track_id": result.get('spotify_track_id'),
@@ -255,6 +290,45 @@ def insert_detection(supabase, result: dict):
     }).execute()
 
 
+def last_detected_row(supabase):
+    """Return the most recent detection row for this device (any status), or None."""
+    try:
+        res = supabase.table("music_auto_detections") \
+            .select("title,artist,status") \
+            .eq("device_id", DEVICE_ID) \
+            .order("detected_at", desc=True) \
+            .limit(1).execute()
+        return res.data[0] if res.data else None
+    except Exception as e:
+        log.warning(f"last_detected_row failed: {e}")
+        return None
+
+
+def save_unrecognized(audio_file: Path):
+    try:
+        UNRECOGNIZED_DIR.mkdir(exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dest = UNRECOGNIZED_DIR / f"{DEVICE_ID}_{ts}.wav"
+        shutil.copy(audio_file, dest)
+        return dest
+    except Exception as e:
+        log.warning(f"save_unrecognized failed: {e}")
+        return None
+
+
+def cleanup_unrecognized():
+    """Delete files older than UNRECOGNIZED_RETAIN_DAYS."""
+    try:
+        if not UNRECOGNIZED_DIR.exists():
+            return
+        cutoff = time.time() - UNRECOGNIZED_RETAIN_DAYS * 86400
+        for f in UNRECOGNIZED_DIR.glob("*.wav"):
+            if f.stat().st_mtime < cutoff:
+                f.unlink(missing_ok=True)
+    except Exception as e:
+        log.warning(f"cleanup_unrecognized failed: {e}")
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 def main():
     if DETECT_SERVICE == 'audd' and not AUDD_API_TOKEN:
@@ -264,19 +338,33 @@ def main():
     if DETECT_SERVICE not in ('audd', 'acrcloud'):
         raise RuntimeError(f"Unknown DETECT_SERVICE: {DETECT_SERVICE}")
 
-    log.info(f"Music Auto Detector | device={DEVICE_ID} | venue={VENUE_NAME} | service={DETECT_SERVICE}")
+    log.info(f"Music Auto Detector | device={DEVICE_ID} | venue={VENUE_NAME} | location={LOCATION} | service={DETECT_SERVICE}")
     supabase = get_supabase()
     device, fmt, channels = detect_mic()
-    log.info(f"Cycle: record {RECORD_DURATION}s every {SLEEP_INTERVAL}s")
+    log.info(f"Cycle: record {RECORD_DURATION}s every {SLEEP_INTERVAL}s (open hours only)")
 
     identify = identify_audd if DETECT_SERVICE == 'audd' else identify_acrcloud
+    last_cleanup_day = None
 
     while True:
         try:
+            # Daily cleanup of old unrecognized files
+            today = datetime.now().date()
+            if last_cleanup_day != today:
+                cleanup_unrecognized()
+                last_cleanup_day = today
+
+            # Only run during venue opening hours
+            if not is_open():
+                log.info("Venue closed, skipping cycle")
+                time.sleep(SLEEP_INTERVAL)
+                continue
+
             audio = record_audio(device, fmt, channels, RECORD_DURATION)
             if audio:
                 result = identify(audio)
                 insert_detection(supabase, result)
+
                 if result['status'] == 'detected':
                     log.info(f"Detected: {result['artist']} - {result['title']}"
                              + (f" [{result['genre']}]" if result.get('genre') else ""))
@@ -291,6 +379,9 @@ def main():
                                 log.info(f"  → Deezer BPM: {bpm}")
                             except Exception as e:
                                 log.warning(f"  → BPM insert failed: {e}")
+                elif result['status'] == 'no_match':
+                    saved = save_unrecognized(audio)
+                    log.info(f"Status: no_match (saved {saved.name if saved else 'failed'})")
                 else:
                     log.info(f"Status: {result['status']}")
         except Exception as e:

@@ -58,6 +58,7 @@ export default function MusicAutoHistory({ deviceSettings }) {
   useEffect(() => {
     supabase.from('music_auto_detections')
       .select('device_id')
+      .order('detected_at', { ascending: false })
       .limit(1000)
       .then(({ data }) => {
         if (data) setDevices([...new Set(data.map(r => r.device_id))].filter(Boolean).sort());

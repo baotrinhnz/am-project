@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export default function SettingsModal({ isOpen, onClose, devices, deviceSettings, onSave }) {
   const [editedSettings, setEditedSettings] = useState({});
   const [saving, setSaving] = useState(false);
 
-  // Initialize settings when modal opens
+  // Initialize settings only when modal opens (not on every parent re-render)
+  const prevOpen = useRef(false);
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevOpen.current) {
       const initial = {};
       devices.forEach(deviceId => {
         const info = deviceSettings.getDeviceInfo(deviceId);
@@ -21,7 +22,8 @@ export default function SettingsModal({ isOpen, onClose, devices, deviceSettings
       });
       setEditedSettings(initial);
     }
-  }, [isOpen, devices, deviceSettings]);
+    prevOpen.current = isOpen;
+  }, [isOpen]);
 
   const handleSave = async () => {
     setSaving(true);
