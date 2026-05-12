@@ -1,0 +1,17 @@
+[Unit]
+Description=Pi Service Monitor (Lark Alert)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=am
+WorkingDirectory=/home/am
+ExecStart=/usr/bin/python3 /home/am/service_monitor.py
+Restart=always
+RestartSec=30
+StandardOutput=append:/home/am/AM_logs/service_monitor/service_monitor.log
+StandardError=append:/home/am/AM_logs/service_monitor/service_monitor.log
+
+[Install]
+WantedBy=multi-user.target
