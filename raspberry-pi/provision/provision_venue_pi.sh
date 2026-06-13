@@ -204,8 +204,20 @@ sudo systemctl restart enviro-monitor || true
 # ── 5) Timezone + hostname ───────────────────────────────────────────────────
 say "Set timezone=$TZ_IN, hostname=$HOSTNAME_NEW"
 sudo timedatectl set-timezone "$TZ_IN"
+# Giữ hostname cố định qua reboot (cloud-init mặc định ghi đè lại)
+if [ -f /etc/cloud/cloud.cfg ]; then
+  if grep -q '^preserve_hostname:' /etc/cloud/cloud.cfg; then
+    sudo sed -i 's/^preserve_hostname:.*/preserve_hostname: true/' /etc/cloud/cloud.cfg
+  else
+    echo 'preserve_hostname: true' | sudo tee -a /etc/cloud/cloud.cfg >/dev/null
+  fi
+fi
 sudo hostnamectl set-hostname "$HOSTNAME_NEW"
-sudo sed -i "s/^127\.0\.1\.1.*/127.0.1.1\t$HOSTNAME_NEW/" /etc/hosts || true
+if grep -q '^127\.0\.1\.1' /etc/hosts; then
+  sudo sed -i "s/^127\.0\.1\.1.*/127.0.1.1\t$HOSTNAME_NEW/" /etc/hosts
+else
+  echo -e "127.0.1.1\t$HOSTNAME_NEW" | sudo tee -a /etc/hosts >/dev/null
+fi
 
 # ── 6) Supabase device_settings (upsert) ─────────────────────────────────────
 say "Thêm/cập nhật device_settings trên Supabase"
