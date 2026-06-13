@@ -1,8 +1,8 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'Enviro+ Air Quality Monitor',
-  description: 'Real-time air quality monitoring dashboard for Raspberry Pi + Enviro+',
+  title: 'MALT Monitor',
+  description: 'Real-time ambience & music monitoring dashboard',
 };
 
 export default function RootLayout({ children }) {

@@ -688,15 +688,12 @@ export default function Dashboard() {
       <header className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-            Ambience Monitor
+            MALT Monitor
           </h1>
           <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot" />
             <span className="text-[10px] text-emerald-400 font-medium uppercase tracking-wider">Live</span>
           </div>
-          <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-            {lastUpdate ? `Last updated: ${format(lastUpdate, 'HH:mm:ss')} · ${format(lastUpdate, 'MMM d')}` : 'Connecting...'}
-          </span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -964,8 +961,9 @@ export default function Dashboard() {
       </div>
 
       {/* Footer */}
-      <footer className="mt-10 text-center text-[10px]" style={{ color: 'var(--text-tertiary)', opacity: 0.5 }}>
-        Prototype &middot; version 0.{process.env.NEXT_PUBLIC_BUILD_VERSION}
+      <footer className="mt-10 text-center text-[10px]" style={{ color: 'var(--text-tertiary)', opacity: 0.6 }}>
+        <div>{lastUpdate ? `Last updated: ${format(lastUpdate, 'HH:mm:ss')} · ${format(lastUpdate, 'MMM d')}` : 'Connecting...'}</div>
+        <div className="mt-1" style={{ opacity: 0.7 }}>Prototype &middot; version 0.{process.env.NEXT_PUBLIC_BUILD_VERSION}</div>
       </footer>
 
       {/* Settings Modal */}

@@ -35,13 +35,13 @@ const SimpleServiceStatus = ({ devices = [], deviceSettings }) => {
   if (devices.length === 0) return null;
 
   return (
-    <div className="flex gap-3 text-xs">
+    <div className="flex gap-2 text-[10px]">
       {devices.map(id => {
         const name = deviceSettings?.getDeviceInfo(id)?.displayName || id;
         const online = deviceStatus[id];
         return (
           <div key={id} className="flex items-center gap-1" title={`${name}: ${online ? 'Online' : 'Offline'}`}>
-            <div className={`w-2 h-2 rounded-full ${online ? 'bg-green-500' : 'bg-gray-700'}`} />
+            <div className={`w-1.5 h-1.5 rounded-full ${online ? 'bg-green-500' : 'bg-gray-700'}`} />
             <span style={{ color: 'var(--text-tertiary)' }}>{name}</span>
           </div>
         );
