@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { format, subHours, subDays, parseISO } from 'date-fns';
 import {
@@ -94,6 +94,33 @@ function formatTime(isoStr, range) {
   } catch {
     return '';
   }
+}
+
+// ─── Venue / device selection helpers ────────────────────────────────────────
+// The top-bar selection is a single string with three possible shapes:
+//   'all'            → every known device
+//   'venue:<name>'   → all devices whose venue (device_settings.location) matches
+//   '<device_id>'    → a single device
+const VENUE_PREFIX = 'venue:';
+const NO_VENUE_LABEL = 'Other';
+
+function resolveDeviceIds(selection, devices, getDeviceInfo) {
+  if (!selection || selection === 'all') return devices;
+  if (selection.startsWith(VENUE_PREFIX)) {
+    const venue = selection.slice(VENUE_PREFIX.length);
+    return devices.filter(id => (getDeviceInfo(id).location || NO_VENUE_LABEL) === venue);
+  }
+  return [selection];
+}
+
+// Group devices by venue for the dropdown → [{ venue, deviceIds }] sorted by venue name.
+function groupDevicesByVenue(devices, getDeviceInfo) {
+  const map = {};
+  devices.forEach(id => {
+    const venue = getDeviceInfo(id).location || NO_VENUE_LABEL;
+    (map[venue] = map[venue] || []).push(id);
+  });
+  return Object.keys(map).sort().map(venue => ({ venue, deviceIds: map[venue] }));
 }
 
 function getAQILevel(pm25) {
@@ -332,15 +359,16 @@ function ChartPanel({ title, icon, sensors, data, range, isMultiDevice }) {
 }
 
 // ─── System Info Panel ──────────────────────────────────────────────────────
-function SystemInfoPanel({ data, range, devices, selectedDevice }) {
+function SystemInfoPanel({ data, range, devices, deviceIds, isAll }) {
   // Query raw row count for accurate update rate (data state is pivoted in multi-device mode)
   const [rawCount, setRawCount] = useState(0);
+  const deviceIdsKey = (deviceIds || []).join(',');
   useEffect(() => {
     const since = getTimeAgo(range.unit, range.value).toISOString();
     let q = supabase.from('sensor_readings').select('*', { count: 'exact', head: true }).gte('recorded_at', since);
-    if (selectedDevice !== 'all') q = q.eq('device_id', selectedDevice);
+    if (!isAll) q = q.in('device_id', deviceIds);
     q.then(({ count }) => setRawCount(count || 0));
-  }, [range, selectedDevice]);
+  }, [range, isAll, deviceIdsKey]);
 
   const totalReadings = rawCount;
   // Count devices that have data in the latest bucket (works for both pivoted and raw)
@@ -484,6 +512,34 @@ export default function Dashboard() {
   // Device settings hook
   const deviceSettings = useDeviceSettings();
 
+  // ── Venue-aware selection ──────────────────────────────────────────────────
+  // All known devices = those with data ∪ those configured in device_settings.
+  // This lets a configured-but-dataless device (e.g. a freshly deployed Pi)
+  // still appear in the venue dropdown before its first reading arrives.
+  const allDevices = useMemo(
+    () => [...new Set([...devices, ...Object.keys(deviceSettings.settings)])],
+    [devices, deviceSettings.settings]
+  );
+  // Devices grouped by venue for the top-bar dropdown
+  const venueGroups = useMemo(
+    () => groupDevicesByVenue(allDevices, deviceSettings.getDeviceInfo),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allDevices, deviceSettings.settings]
+  );
+  // Concrete device_ids that the current selection resolves to
+  const selectedDeviceIds = useMemo(
+    () => resolveDeviceIds(selectedDevice, allDevices, deviceSettings.getDeviceInfo),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedDevice, allDevices, deviceSettings.settings]
+  );
+  const isAllSelected = selectedDevice === 'all';
+  // Human label for the dropdown button
+  const selectionLabel = isAllSelected
+    ? 'All Devices'
+    : selectedDevice.startsWith(VENUE_PREFIX)
+      ? selectedDevice.slice(VENUE_PREFIX.length)
+      : deviceSettings.getDeviceInfo(selectedDevice).displayName;
+
   // Theme toggle effect
   useEffect(() => {
     // Load theme from localStorage
@@ -527,9 +583,10 @@ export default function Dashboard() {
       .order('recorded_at', { ascending: true })
       .limit(2000);
 
-    // Filter by device if not 'all'
+    // Filter by selection (single device or a venue's set of devices)
+    const targetIds = resolveDeviceIds(selectedDevice, allDevices, deviceSettings.getDeviceInfo);
     if (selectedDevice !== 'all') {
-      query = query.eq('device_id', selectedDevice);
+      query = query.in('device_id', targetIds);
     }
 
     const { data: rows, error } = await query;
@@ -540,11 +597,12 @@ export default function Dashboard() {
       return;
     }
 
-    if (selectedDevice === 'all' && rows?.length > 0) {
+    // Multi-device view whenever the returned rows span more than one device
+    const activeDevices = [...new Set((rows || []).map(r => r.device_id))].filter(Boolean);
+    if (activeDevices.length > 1 && rows?.length > 0) {
       // Multi-device: pivot data into per-device columns + averages
       const sensorKeys = INDIVIDUAL_SENSORS.map(s => s.key);
       const pivoted = pivotDataForMultiDevice(rows, sensorKeys, range, formatTime);
-      const activeDevices = [...new Set(rows.map(r => r.device_id))].filter(Boolean);
       setData(pivoted);
       setDeviceColorMap(getDeviceColorMap(activeDevices));
       setIsMultiDevice(true);
@@ -595,11 +653,12 @@ export default function Dashboard() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'sensor_readings' },
         (payload) => {
-          // Only update if matches selected device or viewing all
-          if (selectedDevice === 'all' || payload.new.device_id === selectedDevice) {
+          // Only update if the new reading belongs to the current selection
+          const targetIds = resolveDeviceIds(selectedDevice, allDevices, deviceSettings.getDeviceInfo);
+          if (selectedDevice === 'all' || targetIds.includes(payload.new.device_id)) {
             setLatest(payload.new);
             setLastUpdate(new Date());
-            if (selectedDevice !== 'all') {
+            if (selectedDevice !== 'all' && targetIds.length === 1) {
               // Single device: append point directly
               setData(prev => {
                 const newPoint = { ...payload.new, time: formatTime(payload.new.recorded_at, range) };
@@ -607,7 +666,7 @@ export default function Dashboard() {
                 return updated.length > 200 ? updated.slice(-200) : updated;
               });
             }
-            // Multi-device: skip append, rely on 60s auto-refresh for chart update
+            // Multi-device (all / venue): skip append, rely on 60s auto-refresh for chart update
           }
           // Always refresh device list when new device appears
           fetchDevices();
@@ -708,7 +767,7 @@ export default function Dashboard() {
             style={{ background: 'var(--surface-2)', border: '1px solid var(--border-color)', color: selectedDevice === 'all' ? 'var(--text-secondary)' : '#a78bfa' }}
           >
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: selectedDevice === 'all' ? 'var(--text-tertiary)' : '#a78bfa' }} />
-            {selectedDevice === 'all' ? 'All Devices' : deviceSettings.getDeviceInfo(selectedDevice).displayName}
+            {selectionLabel}
             <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
@@ -730,25 +789,50 @@ export default function Dashboard() {
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: selectedDevice === 'all' ? '#a78bfa' : 'var(--text-tertiary)', opacity: selectedDevice === 'all' ? 1 : 0.4 }} />
                   All Devices
                 </button>
-                {devices.map(deviceId => {
-                  const deviceInfo = deviceSettings.getDeviceInfo(deviceId);
+                {venueGroups.map(({ venue, deviceIds }) => {
+                  const venueSel = `${VENUE_PREFIX}${venue}`;
+                  const venueActive = selectedDevice === venueSel;
                   return (
-                    <button
-                      key={deviceId}
-                      onClick={() => { setSelectedDevice(deviceId); setDeviceDropdownOpen(false); }}
-                      className="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium transition-all text-left"
-                      style={selectedDevice === deviceId
-                        ? { background: 'rgba(168, 85, 247, 0.15)', color: '#a78bfa' }
-                        : { color: 'var(--text-tertiary)' }
-                      }
-                      title={deviceInfo.note || deviceInfo.location || deviceId}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: selectedDevice === deviceId ? '#a78bfa' : 'var(--text-tertiary)', opacity: selectedDevice === deviceId ? 1 : 0.4 }} />
-                      <span>{deviceInfo.displayName}</span>
-                      {deviceInfo.location && (
-                        <span className="ml-1 text-[10px] opacity-50">({deviceInfo.location})</span>
-                      )}
-                    </button>
+                    <div key={venue} style={{ borderTop: '1px solid var(--border-color)' }}>
+                      {/* Venue header — selects the whole venue */}
+                      <button
+                        onClick={() => { setSelectedDevice(venueSel); setDeviceDropdownOpen(false); }}
+                        className="flex items-center justify-between w-full px-3 py-2 text-xs font-semibold transition-all text-left"
+                        style={venueActive
+                          ? { background: 'rgba(168, 85, 247, 0.15)', color: '#a78bfa' }
+                          : { color: 'var(--text-secondary)' }
+                        }
+                        title={`View all ${deviceIds.length} device(s) at ${venue}`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span>🏠</span>
+                          <span>{venue}</span>
+                        </span>
+                        <span className="text-[10px] opacity-50">{deviceIds.length}</span>
+                      </button>
+                      {/* Individual devices in this venue */}
+                      {deviceIds.map(deviceId => {
+                        const deviceInfo = deviceSettings.getDeviceInfo(deviceId);
+                        return (
+                          <button
+                            key={deviceId}
+                            onClick={() => { setSelectedDevice(deviceId); setDeviceDropdownOpen(false); }}
+                            className="flex items-center gap-2 w-full pl-7 pr-3 py-2 text-xs font-medium transition-all text-left"
+                            style={selectedDevice === deviceId
+                              ? { background: 'rgba(168, 85, 247, 0.15)', color: '#a78bfa' }
+                              : { color: 'var(--text-tertiary)' }
+                            }
+                            title={deviceInfo.note || deviceInfo.location || deviceId}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ background: selectedDevice === deviceId ? '#a78bfa' : 'var(--text-tertiary)', opacity: selectedDevice === deviceId ? 1 : 0.4 }} />
+                            <span>{deviceInfo.displayName}</span>
+                            {deviceInfo.note && (
+                              <span className="ml-1 text-[10px] opacity-50">({deviceInfo.note})</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   );
                 })}
               </div>
@@ -869,13 +953,14 @@ export default function Dashboard() {
           data={data}
           range={range}
           devices={devices}
-          selectedDevice={selectedDevice}
+          deviceIds={selectedDeviceIds}
+          isAll={isAllSelected}
         />
       </div>
 
       {/* Music Beat — full width */}
       <div className="mt-4">
-        <MusicBpmWidget range={range} deviceId={selectedDevice} deviceSettings={deviceSettings} />
+        <MusicBpmWidget range={range} deviceIds={selectedDeviceIds} isAll={isAllSelected} deviceSettings={deviceSettings} />
       </div>
 
       {/* Footer */}

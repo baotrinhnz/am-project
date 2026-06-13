@@ -12,7 +12,8 @@ const LOCAL_RANGES = [
   { label: '↑',   minutes: null },
 ];
 
-export default function MusicBpmWidget({ range, deviceId }) {
+export default function MusicBpmWidget({ range, deviceIds, isAll }) {
+  const deviceIdsKey = (deviceIds || []).join(',');
   const [data, setData] = useState([]);
   const [latest, setLatest] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -35,8 +36,8 @@ export default function MusicBpmWidget({ range, deviceId }) {
       .order('recorded_at', { ascending: true })
       .limit(500);
 
-    if (deviceId && deviceId !== 'all') {
-      query = query.eq('device_id', deviceId);
+    if (!isAll && deviceIds && deviceIds.length > 0) {
+      query = query.in('device_id', deviceIds);
     }
 
     const { data: rows } = await query;
@@ -63,7 +64,7 @@ export default function MusicBpmWidget({ range, deviceId }) {
       .subscribe();
 
     return () => supabase.removeChannel(sub);
-  }, [range, deviceId, localRange]);
+  }, [range, deviceIdsKey, isAll, localRange]);
 
   const formatTime = (ts) => {
     try {
