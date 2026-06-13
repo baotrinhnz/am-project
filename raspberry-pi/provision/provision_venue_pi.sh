@@ -77,6 +77,8 @@ read -rp "  Location trong venue (Enter = bỏ trống, vd Main Bar): " LOCATION
 read -rp "  Hostname mới (vd rosie1): " HOSTNAME_NEW
 read -rp "  Temp compensation factor [2.25]: " TEMP_COMP; TEMP_COMP="${TEMP_COMP:-2.25}"
 read -rp "  Timezone [$TZ_DEFAULT]: " TZ_IN; TZ_IN="${TZ_IN:-$TZ_DEFAULT}"
+read -rp "  Bật screen sharing qua Pi Connect (cài rpi-connect full + Desktop Autologin)? [y/N]: " SS_IN
+ENABLE_SS="no"; [[ "${SS_IN,,}" == "y" ]] && ENABLE_SS="yes"
 
 say "WiFi quán"
 read -rp "  SSID: " WIFI_SSID
@@ -115,6 +117,7 @@ cat <<SUMMARY
  Timezone      : $TZ_IN
  Temp comp     : $TEMP_COMP
  WiFi          : $WIFI_SSID
+ Screen share  : $ENABLE_SS
  Detect        : ACRCloud ($ACRCLOUD_HOST)
  Schedule      :
 $(printf '%s' "$SCHED_BODY" | sed 's/^/   /')
@@ -213,9 +216,32 @@ curl -s -X POST "$SUPABASE_URL/rest/v1/device_settings?on_conflict=device_id" \
   -d "{\"device_id\":\"$DEVICE_ID\",\"display_name\":\"$DISPLAY_NAME\",\"location\":\"$VENUE_NAME\",\"note\":\"$LOCATION\"}" \
   && echo
 
+# ── 7) Screen sharing qua Pi Connect (tùy chọn) ──────────────────────────────
+NEEDS_REBOOT="no"
+if [ "$ENABLE_SS" == "yes" ]; then
+  say "Bật screen sharing: cài rpi-connect (full) + Desktop Autologin"
+  sudo apt-get update -qq || true
+  sudo apt-get install -y rpi-connect          # bản full có screen sharing (thay rpi-connect-lite)
+  sudo raspi-config nonint do_boot_behaviour B4 # Desktop Autologin → có Wayland session
+  loginctl enable-linger "$USER_NAME" || true
+  export XDG_RUNTIME_DIR="/run/user/$(id -u "$USER_NAME")"
+  rpi-connect on || true
+  NEEDS_REBOOT="yes"
+  if rpi-connect status 2>/dev/null | grep -q "Signed in: yes"; then
+    echo "  Pi Connect: đã đăng nhập sẵn."
+  else
+    warn "Pi Connect CHƯA đăng nhập. Sau khi script xong chạy: rpi-connect signin  (mở link để liên kết tài khoản)."
+  fi
+fi
+
 say "XONG. Kiểm tra nhanh:"
 echo "  systemctl is-active music-detector-auto enviro-monitor"
 echo "  tail -f $USER_HOME/AM_logs/music_detector_auto/music_detector_auto.log"
 echo
-warn "Lưu ý: sensor chỉ có data sau khi GẮN board Enviro+. Đổi hostname có thể cần reboot để áp dụng hoàn toàn."
-warn "Nếu cần screen sharing qua Pi Connect: bật Desktop Autologin (sudo raspi-config nonint do_boot_behaviour B4) rồi reboot."
+warn "Sensor chỉ có data sau khi GẮN board Enviro+."
+
+if [ "$NEEDS_REBOOT" == "yes" ]; then
+  warn "Desktop Autologin cần REBOOT để khởi động Wayland session (screen sharing mới chạy)."
+  read -rp "Reboot ngay bây giờ? [y/N]: " RB
+  if [[ "${RB,,}" == "y" ]]; then say "Reboot..."; sudo reboot; fi
+fi
