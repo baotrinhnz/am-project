@@ -2,6 +2,7 @@
 .env
 .env.local
 raspberry-pi/.env
+raspberry-pi/provision/venue_secrets.env
 
 # Node modules
 node_modules/

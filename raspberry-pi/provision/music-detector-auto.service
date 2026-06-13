@@ -1,0 +1,18 @@
+[Unit]
+Description=Music Auto Detector (AudD/ACRCloud)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=am
+WorkingDirectory=/home/am
+Environment="PATH=/usr/bin:/usr/local/bin:/home/am/.local/bin"
+ExecStart=/usr/bin/python3 /home/am/music_detector_auto.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/home/am/AM_logs/music_detector_auto/music_detector_auto.log
+StandardError=append:/home/am/AM_logs/music_detector_auto/music_detector_auto.log
+
+[Install]
+WantedBy=multi-user.target
