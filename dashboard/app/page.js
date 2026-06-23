@@ -16,6 +16,14 @@ import BpmWidget from '../components/BpmWidget';
 import MusicBpmWidget from '../components/MusicBpmWidget';
 
 
+// ─── Noise Calibration: FFT amplitude → dB ─────────────────────────────────
+const NOISE_FACTOR = 20;
+const NOISE_OFFSET = 44;
+function fftToDb(val) {
+  if (val == null || val <= 0) return null;
+  return Math.round((NOISE_FACTOR * Math.log10(val) + NOISE_OFFSET) * 10) / 10;
+}
+
 // ─── Time Range Options ─────────────────────────────────────────────────────
 const TIME_RANGES = [
   { label: '1H', value: 1, unit: 'hours' },
@@ -32,7 +40,7 @@ const INDIVIDUAL_SENSORS = [
   { key: 'humidity', label: 'Humidity', unit: '%', color: '#60a5fa', icon: '💧', decimals: 1 },
   { key: 'pressure', label: 'Pressure', unit: 'hPa', color: '#a78bfa', icon: '🔵', decimals: 0 },
   { key: 'lux', label: 'Light', unit: 'lux', color: '#fbbf24', icon: '☀️', decimals: 0 },
-  { key: 'noise_level', label: 'Noise', unit: '', color: '#f472b6', icon: '🔊', decimals: 3 },
+  { key: 'noise_level', label: 'Noise', unit: 'dB', color: '#f472b6', icon: '🔊', decimals: 1 },
   { key: 'gas_oxidising', label: 'Oxidising', unit: 'kΩ', color: '#2dd4bf', icon: '🧪', decimals: 1 },
   { key: 'gas_reducing', label: 'Reducing', unit: 'kΩ', color: '#4ade80', icon: '🧪', decimals: 1 },
   { key: 'gas_nh3', label: 'NH₃', unit: 'kΩ', color: '#fb923c', icon: '🧪', decimals: 1 },
@@ -54,7 +62,7 @@ const SENSOR_GROUPS = [
     icon: '💡',
     sensors: [
       { key: 'lux', label: 'Light', unit: 'lux', color: '#fbbf24', decimals: 0 },
-      { key: 'noise_level', label: 'Noise', unit: '', color: '#f472b6', decimals: 3 },
+      { key: 'noise_level', label: 'Noise', unit: 'dB', color: '#f472b6', decimals: 1 },
     ]
   },
   {
@@ -597,6 +605,11 @@ export default function Dashboard() {
       return;
     }
 
+    // Convert noise FFT → dB trước khi xử lý chart
+    for (const r of (rows || [])) {
+      r.noise_level = fftToDb(r.noise_level);
+    }
+
     // Multi-device view whenever the returned rows span more than one device
     const activeDevices = [...new Set((rows || []).map(r => r.device_id))].filter(Boolean);
     if (activeDevices.length > 1 && rows?.length > 0) {
@@ -895,7 +908,7 @@ export default function Dashboard() {
               <StatCard label={lbl("Humidity")} value={last?.humidity_avg?.toFixed(1)} unit="%" color="#60a5fa" icon="💧" />
               <StatCard label={lbl("Pressure")} value={last?.pressure_avg?.toFixed(0)} unit="hPa" color="#a78bfa" icon="🔵" />
               <StatCard label={lbl("Light")} value={last?.lux_avg?.toFixed(0)} unit="lux" color="#fbbf24" icon="☀️" />
-              <StatCard label={lbl("Noise")} value={last?.noise_level_avg?.toFixed(3)} unit="" color="#f472b6" icon="🔊" />
+              <StatCard label={lbl("Noise")} value={last?.noise_level_avg?.toFixed(1)} unit="dB" color="#f472b6" icon="🔊" />
             </>);
           }
           return (<>
@@ -903,7 +916,7 @@ export default function Dashboard() {
             <StatCard label="Humidity" value={latest?.humidity?.toFixed(1)} unit="%" color="#60a5fa" icon="💧" />
             <StatCard label="Pressure" value={latest?.pressure?.toFixed(0)} unit="hPa" color="#a78bfa" icon="🔵" />
             <StatCard label="Light" value={latest?.lux?.toFixed(0)} unit="lux" color="#fbbf24" icon="☀️" />
-            <StatCard label="Noise" value={latest?.noise_level?.toFixed(3)} unit="" color="#f472b6" icon="🔊" />
+            <StatCard label="Noise" value={latest?.noise_level?.toFixed(1)} unit="dB" color="#f472b6" icon="🔊" />
           </>);
         })()}
       </div>
